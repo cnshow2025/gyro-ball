@@ -10,7 +10,7 @@ function defaults() {
     unlocked: 1,
     bestGems: {},
     boards: {},
-    settings: { name: '玩家', sound: true, vibrate: true, sens: 0.6, shadows: true },
+    settings: { name: '玩家', sound: true, music: true, vibrate: true, sens: 0.6, shadows: true },
   };
 }
 

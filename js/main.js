@@ -2,7 +2,7 @@ import { Game } from './game.js';
 import { TiltInput } from './input.js';
 import { LEVELS } from './levels.js';
 import { store } from './storage.js';
-import { initAudio, setSoundEnabled, updateRoll, sfx } from './audio.js';
+import { initAudio, setSoundEnabled, setMusicEnabled, updateRoll, sfx } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const screens = ['menu', 'levels', 'board', 'settings', 'pause', 'clear'];
@@ -10,6 +10,7 @@ const screens = ['menu', 'levels', 'board', 'settings', 'pause', 'clear'];
 const input = new TiltInput();
 input.sens = store.settings.sens;
 setSoundEnabled(store.settings.sound);
+setMusicEnabled(store.settings.music);
 
 const game = new Game($('game'), input, {
   onGem(n) {
@@ -211,6 +212,7 @@ function renderSettings() {
   const s = store.settings;
   $('set-name').value = s.name;
   $('set-sound').checked = s.sound;
+  $('set-music').checked = s.music;
   $('set-vibrate').checked = s.vibrate;
   $('set-shadows').checked = s.shadows;
   $('set-sens').value = s.sens;
@@ -259,6 +261,7 @@ $('btn-menu').onclick = goMenu;
 
 $('set-name').oninput = (e) => store.setSetting('name', e.target.value.trim() || '玩家');
 $('set-sound').onchange = (e) => { store.setSetting('sound', e.target.checked); setSoundEnabled(e.target.checked); };
+$('set-music').onchange = (e) => { store.setSetting('music', e.target.checked); setMusicEnabled(e.target.checked); };
 $('set-shadows').onchange = (e) => { store.setSetting('shadows', e.target.checked); game.setShadows(e.target.checked); };
 $('set-vibrate').onchange = (e) => { store.setSetting('vibrate', e.target.checked); if (e.target.checked) vibrate(60); };
 $('set-sens').oninput = (e) => {
