@@ -61,8 +61,9 @@ export class Game {
     const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0004;
-    sun.shadow.normalBias = 0.02;
+    // 偏移量加大：手機的陰影精度較低，板子傾斜時容易把表面誤判成陰影（大片黑斑）
+    sun.shadow.bias = -0.0012;
+    sun.shadow.normalBias = 0.05;
     scene.add(sun, sun.target);
     this.sun = sun;
     this.sunOffset = new THREE.Vector3(-12, 26, 10);
@@ -240,7 +241,8 @@ export class Game {
     if (this.world) { this.scene.remove(this.world); this.world.traverse((o) => o.geometry?.dispose()); }
     const w = new THREE.Group();
     this.world = w;
-    const gy = this.floorY - 3;
+    // 地面放低一點：板子最大傾斜時邊緣也不會碰到地面
+    const gy = this.floorY - 4.5;
     const c = box.getCenter(new THREE.Vector3());
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), this.mats.ground);
     ground.rotation.x = -Math.PI / 2;
@@ -255,9 +257,11 @@ export class Game {
 
     // 模型台底座
     const size = box.getSize(new THREE.Vector3());
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(size.x, size.z) * 0.25, Math.min(size.x, size.z) * 0.3, 3, 24), this.mats.frame);
-    ped.position.set(c.x, gy + 1.5 - 0.6, c.z);
-    w.add(ped);
+    // 底座放在板子裡（跟著一起傾斜），頂端貼齊板子底面，傾斜時才不會從草地穿出來
+    const pedH = 4.5;
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(size.x, size.z) * 0.2, Math.min(size.x, size.z) * 0.26, pedH, 24), this.mats.frame);
+    ped.position.set(c.x, this.floorY - 0.5 - pedH / 2, c.z);
+    this.content.add(ped);
 
     // 樹
     const n = 140;
@@ -474,7 +478,6 @@ export class Game {
       im.setMatrixAt(k, m);
     });
     im.castShadow = true;
-    im.receiveShadow = true;
     this.content.add(im);
   }
 
@@ -570,6 +573,17 @@ export class Game {
 
   resize() { this.fitCamera(); }
 
+  // 陰影開關（設定頁）
+  setShadows(on) {
+    if (this.renderer.shadowMap.enabled === on) return;
+    this.renderer.shadowMap.enabled = on;
+    this.sun.castShadow = on;
+    this.scene.traverse((o) => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
+    });
+  }
+
   updateCamera(dt) {
     const follow = this.state === 'play' || this.state === 'falling' || this.state === 'won' || this.state === 'paused';
     const ov = this.overview;
@@ -600,7 +614,10 @@ export class Game {
     const R = THREE.MathUtils.clamp(this.camDist * 0.9, 9, this.overviewR);
     const sc = this.sun.shadow.camera;
     if (Math.abs(sc.right - R) > 0.5) {
-      sc.left = sc.bottom = -R; sc.right = sc.top = R; sc.near = 1; sc.far = 120;
+      // 深度範圍只包住畫面附近，提高手機上的陰影精度
+      const D = this.sunOffset.length();
+      sc.left = sc.bottom = -R; sc.right = sc.top = R;
+      sc.near = Math.max(0.5, D - R - 14); sc.far = D + R + 14;
       sc.updateProjectionMatrix();
     }
     this.sun.position.copy(this.camTarget).add(this.sunOffset);
@@ -811,7 +828,6 @@ function tubeMesh(tr, centerFn, radius, radial, material, rot = 0) {
   g.setIndex(idx);
   const m = new THREE.Mesh(g, material);
   m.castShadow = true;
-  m.receiveShadow = true;
   return m;
 }
 

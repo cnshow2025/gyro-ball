@@ -212,6 +212,7 @@ function renderSettings() {
   $('set-name').value = s.name;
   $('set-sound').checked = s.sound;
   $('set-vibrate').checked = s.vibrate;
+  $('set-shadows').checked = s.shadows;
   $('set-sens').value = s.sens;
   $('sens-val').textContent = `×${Number(s.sens).toFixed(1)}`;
 }
@@ -258,6 +259,7 @@ $('btn-menu').onclick = goMenu;
 
 $('set-name').oninput = (e) => store.setSetting('name', e.target.value.trim() || '玩家');
 $('set-sound').onchange = (e) => { store.setSetting('sound', e.target.checked); setSoundEnabled(e.target.checked); };
+$('set-shadows').onchange = (e) => { store.setSetting('shadows', e.target.checked); game.setShadows(e.target.checked); };
 $('set-vibrate').onchange = (e) => { store.setSetting('vibrate', e.target.checked); if (e.target.checked) vibrate(60); };
 $('set-sens').oninput = (e) => {
   const v = parseFloat(e.target.value);
@@ -316,6 +318,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+game.setShadows(store.settings.shadows);
 goMenu();
 requestAnimationFrame(frame);
 
