@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#05070f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>星際鋼珠 · 陀螺儀闖關</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- 遊戲中 HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="hud-box"><span class="hud-label">關卡</span><span id="hud-level">1</span></div>
+      <div class="hud-box hud-time"><span class="hud-label">時間</span><span id="hud-time">00:00.00</span></div>
+      <div class="hud-box"><span class="hud-label">晶石</span><span id="hud-gems">0/3</span></div>
+    </div>
+    <div class="hud-sub">
+      <span>掉落 <b id="hud-falls">0</b></span>
+    </div>
+    <div class="hud-buttons">
+      <button id="btn-calibrate" class="icon-btn" title="重新校正水平">⊕</button>
+      <button id="btn-pause" class="icon-btn" title="暫停">❚❚</button>
+    </div>
+    <div id="toast"></div>
+    <div id="countdown"></div>
+    <div id="control-hint"></div>
+  </div>
+
+  <!-- 主選單 -->
+  <section id="screen-menu" class="screen">
+    <div class="panel">
+      <h1 class="title">星際鋼珠</h1>
+      <p class="subtitle">傾斜手機，讓鋼珠沿軌道滾向傳送門</p>
+      <button class="btn primary" id="btn-start">開始遊戲</button>
+      <button class="btn" id="btn-levels">選擇關卡</button>
+      <button class="btn" id="btn-board">排行榜</button>
+      <button class="btn" id="btn-settings">設定</button>
+      <p class="tip" id="menu-tip"></p>
+    </div>
+  </section>
+
+  <!-- 關卡選擇 -->
+  <section id="screen-levels" class="screen hidden">
+    <div class="panel wide">
+      <h2>選擇關卡</h2>
+      <div id="level-list" class="level-list"></div>
+      <button class="btn" data-back>返回</button>
+    </div>
+  </section>
+
+  <!-- 排行榜 -->
+  <section id="screen-board" class="screen hidden">
+    <div class="panel wide">
+      <h2>計時排行榜</h2>
+      <div id="board-tabs" class="tabs"></div>
+      <table class="board">
+        <thead><tr><th>#</th><th>玩家</th><th>成績</th><th>原始時間</th><th>晶石</th><th>日期</th></tr></thead>
+        <tbody id="board-body"></tbody>
+      </table>
+      <p class="tip">成績 = 通關時間 − 每顆晶石 2 秒</p>
+      <button class="btn" data-back>返回</button>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="screen-settings" class="screen hidden">
+    <div class="panel">
+      <h2>設定</h2>
+      <label class="row">玩家名稱
+        <input id="set-name" type="text" maxlength="12" />
+      </label>
+      <label class="row">音效
+        <input id="set-sound" type="checkbox" />
+      </label>
+      <label class="row">震動回饋
+        <input id="set-vibrate" type="checkbox" />
+      </label>
+      <label class="row col">傾斜靈敏度 <span id="sens-val"></span>
+        <input id="set-sens" type="range" min="0.5" max="2" step="0.1" />
+      </label>
+      <p class="tip">iPhone 的 Safari 不支援網頁震動，其他手機才有震動回饋。</p>
+      <button class="btn danger" id="btn-reset">清除所有紀錄</button>
+      <button class="btn" data-back>返回</button>
+    </div>
+  </section>
+
+  <!-- 暫停 -->
+  <section id="screen-pause" class="screen hidden">
+    <div class="panel">
+      <h2>暫停</h2>
+      <button class="btn primary" id="btn-resume">繼續</button>
+      <button class="btn" id="btn-restart">重新開始本關</button>
+      <button class="btn" id="btn-quit">回主選單</button>
+    </div>
+  </section>
+
+  <!-- 通關 -->
+  <section id="screen-clear" class="screen hidden">
+    <div class="panel">
+      <h2 id="clear-title">通關！</h2>
+      <div class="result">
+        <div><span>通關時間</span><b id="res-time"></b></div>
+        <div><span>晶石</span><b id="res-gems"></b></div>
+        <div><span>掉落</span><b id="res-falls"></b></div>
+        <div class="score"><span>成績</span><b id="res-score"></b></div>
+      </div>
+      <p id="res-rank" class="rank"></p>
+      <button class="btn primary" id="btn-next">下一關</button>
+      <button class="btn" id="btn-retry">再玩一次</button>
+      <button class="btn" id="btn-menu">回主選單</button>
+    </div>
+  </section>
+
+  <div id="rotate-hint" class="hidden">請將手機直向握持</div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

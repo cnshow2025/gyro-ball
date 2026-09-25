@@ -1,0 +1,10 @@
+{
+  "name": "星際鋼珠 · 陀螺儀闖關",
+  "short_name": "星際鋼珠",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#05070f",
+  "theme_color": "#05070f",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
