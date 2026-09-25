@@ -1,136 +1,123 @@
-// 關卡資料
-// 座標系：y 向上，鏡頭在 +z 方向往 -z 看；軌道大致往 -z 延伸。
-// 所有 y 值都是「軌道表面」高度。
-
-const T = 0.5; // 軌道厚度
-
-function floor(cx, cz, w, d, y = 0, mat) {
-  return { type: 'box', kind: 'floor', mat, pos: [cx, y - T / 2, cz], size: [w, T, d] };
-}
-
-// 護欄（只支援與 x 或 z 軸平行）
-function rail(x1, z1, x2, z2, y = 0) {
-  const h = 0.55, t = 0.2;
-  const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
-  const size = x1 === x2 ? [t, h, Math.abs(z2 - z1) + t] : [Math.abs(x2 - x1) + t, h, t];
-  return { type: 'box', kind: 'rail', mat: 'rail', pos: [cx, y + h / 2, cz], size };
-}
-
-// 斜坡：由 (x1,y1,z1) 表面點連到 (x2,y2,z2) 表面點
-function ramp(x1, z1, y1, x2, z2, y2, w, mat) {
-  const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-  const horiz = Math.hypot(dx, dz);
-  const len = Math.hypot(horiz, dy) + 0.3; // 稍微加長，避免接縫
-  const yaw = Math.atan2(dx, dz);
-  const pitch = -Math.atan2(dy, horiz);
-  return {
-    type: 'ramp', kind: 'floor', mat,
-    mid: [(x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2],
-    size: [w, T, len], euler: [pitch, yaw, 0],
-  };
-}
-
-// 移動平台：沿 axis 做正弦往返
-function mover(x, surfaceY, z, w, d, axis, amp, period, phase = 0) {
-  return { type: 'mover', pos: [x, surfaceY - T / 2, z], size: [w, T, d], axis, amp, period, phase };
-}
-
-// 旋轉掃桿
-function spinner(x, surfaceY, z, len, speed) {
-  return { type: 'spinner', pos: [x, surfaceY + 0.3, z], len, speed };
-}
+// 關卡：每關是一條連續的雲霄飛車雙軌
+// 用 Path 畫筆描述：straight 直線、turn 彎道、hill 山丘、ramp 跳台、gap 斷橋、loop 迴圈
+import { Path } from './track.js';
 
 export const LEVELS = [
   // ---------------------------------------------------------------- 1
   {
-    name: '啟航', desc: '寬敞木軌，熟悉傾斜手感', mat: 'wood',
-    start: [0, 0.5, 1], goal: [6, 0, -27],
-    pieces: [
-      floor(0, -5, 4, 16),
-      floor(3, -15, 10, 4),
-      floor(6, -23, 4, 12),
-      rail(-2, 3, 2, 3), rail(-2, 3, -2, -17), rail(2, 3, 2, -13),
-      rail(2, -13, 8, -13), rail(-2, -17, 4, -17),
-      rail(8, -13, 8, -29), rail(4, -17, 4, -29), rail(4, -29, 8, -29),
-    ],
-    gems: [[0, 0.5, -4], [3, 0.5, -15], [6, 0.5, -21]],
-    checkpoints: [],
+    name: '啟航', desc: '緩坡與大彎道，熟悉前傾加速、後傾煞車', sleeper: 'wood',
+    build: () => new Path(0, 10, 0)
+      .straight(8)
+      .straight(14, -3).gem(0, 5)
+      .turn(90, 16, 0, 12)
+      .hill(22, 2).gem(0, 11)
+      .turn(-90, 16, -1, 12)
+      .checkpoint()
+      .straight(10, -2).gem(0, 3)
+      .turn(60, 18, 0, 10)
+      .hill(24, 2.5)
+      .straight(16)
+      .straight(10),
   },
   // ---------------------------------------------------------------- 2
   {
-    name: '雙峰', desc: '上坡、平台、下坡，小心邊緣', mat: 'wood',
-    start: [0, 0.5, 1], goal: [-8, 0, -37],
-    pieces: [
-      floor(0, -3, 3, 10),
-      rail(-1.5, 2, 1.5, 2), rail(-1.5, 2, -1.5, -8), rail(1.5, 2, 1.5, -8),
-      ramp(0, -8, 0, 0, -16, 2, 3),
-      floor(0, -19, 3, 6, 2),
-      floor(-4, -23.5, 11, 3, 2),
-      rail(-9.5, -22, -1.5, -22, 2), rail(-6.5, -25, 1.5, -25, 2), rail(1.5, -22, 1.5, -25, 2),
-      ramp(-8, -25, 2, -8, -33, 0, 3),
-      floor(-8, -36, 4, 6),
-      rail(-10, -33, -10, -39), rail(-6, -33, -6, -39), rail(-10, -39, -6, -39),
-    ],
-    gems: [[0, 1.5, -12], [-5, 2.5, -23.5], [-8, 1.5, -29]],
-    checkpoints: [[0, 2, -18]],
+    name: '波浪', desc: '連續山丘，太快會騰空飛出', sleeper: 'wood',
+    build: () => new Path(0, 14, 0)
+      .straight(8)
+      .straight(16, -5)
+      .hill(18, 3).gem(0, 9)
+      .hill(18, 3.5)
+      .checkpoint()
+      .straight(6)
+      .turn(-120, 12, -1, 20).gem(0, 10)
+      .hill(16, 2.5).gem(0, 8)
+      .hill(20, 4)
+      .checkpoint()
+      .straight(6)
+      .turn(100, 12, 0, 20)
+      .straight(10, -2)
+      .hill(18, 3).gem(0, 9)
+      .straight(14)
+      .straight(10),
   },
   // ---------------------------------------------------------------- 3
   {
-    name: '浮動橋', desc: '搭上移動平台跨越深淵', mat: 'stone',
-    start: [0, 0.5, 1], goal: [0, 0, -43],
-    pieces: [
-      floor(0, -3, 3, 10),
-      rail(-1.5, 2, 1.5, 2), rail(-1.5, 2, -1.5, -8), rail(1.5, 2, 1.5, -8),
-      mover(0, 0, -13, 3, 3, 'z', 3.5, 6),
-      floor(0, -21, 3, 6),
-      floor(0, -30, 1.6, 12),
-      mover(0, 0, -37.5, 3, 3, 'x', 3, 5),
-      floor(0, -42, 4, 6),
-      rail(-2, -39, -2, -45), rail(2, -39, 2, -45), rail(-2, -45, 2, -45),
-    ],
-    gems: [[0, 0.5, -13], [0, 0.5, -30], [2.6, 0.5, -37.5]],
-    checkpoints: [[0, 0, -20]],
+    name: '飛躍斷橋', desc: '衝上跳台，飛越斷橋接回軌道', sleeper: 'stone',
+    build: () => new Path(0, 16, 0)
+      .straight(8)
+      .straight(18, -6)
+      .straight(6)
+      .ramp(8, 2.2)
+      .gap(8, -2).gem(1, 4)
+      .straight(10, -1)
+      .checkpoint()
+      .straight(4)
+      .turn(90, 14, -2, 15).gem(0, 10)
+      .straight(12, -2)
+      .ramp(6, 1.6)
+      .gap(6, -1.5)
+      .straight(8, -1)
+      .checkpoint()
+      .straight(4)
+      .turn(-90, 12, 0, 18)
+      .hill(16, 2).gem(0, 8)
+      .straight(12)
+      .straight(10),
   },
   // ---------------------------------------------------------------- 4
   {
-    name: '旋轉閘門', desc: '抓準時機穿越掃桿，再走窄道', mat: 'stone',
-    start: [0, 0.5, 1], goal: [3.6, 0, -36.5],
-    pieces: [
-      floor(0, -8, 5, 20),
-      rail(-2.5, 2, 2.5, 2), rail(-2.5, 2, -2.5, -18), rail(2.5, 2, 2.5, -18),
-      rail(-0.7, -18, 2.5, -18),
-      spinner(0, 0, -5, 4.4, 1.2),
-      spinner(0, 0, -13, 4.4, -1.6),
-      floor(-1.6, -21.5, 1.8, 7),
-      floor(1, -25.9, 7, 1.8),
-      floor(3.6, -30.4, 1.8, 7.2),
-      floor(3.6, -36, 4, 4),
-      rail(1.6, -34, 1.6, -38), rail(5.6, -34, 5.6, -38), rail(1.6, -38, 5.6, -38),
-    ],
-    gems: [[0, 0.5, -9], [-1.6, 0.5, -23], [3.6, 0.5, -31]],
-    checkpoints: [[-1.6, 0, -19.5]],
+    name: '急彎連橋', desc: '髮夾彎接連續斷橋，控速是關鍵', sleeper: 'stone',
+    build: () => new Path(0, 18, 0)
+      .straight(8)
+      .straight(14, -5)
+      .turn(80, 8, -1, 25).gem(0, 6)
+      .turn(-80, 8, -1, 25)
+      .checkpoint()
+      .straight(8, -1)
+      .ramp(6, 1.5)
+      .gap(6, -1.5).gem(0.8, 3)
+      .straight(4, -0.5)
+      .ramp(5, 1.2)
+      .gap(6, -1.5)
+      .straight(8, -1)
+      .checkpoint()
+      .straight(4)
+      .turn(-150, 9, -2, 25).gem(0, 10)
+      .hill(14, 2)
+      .turn(90, 8, 0, 25)
+      .straight(10, -2)
+      .ramp(6, 1.5)
+      .gap(7, -2).gem(1, 3.5)
+      .straight(10, -1)
+      .straight(10),
   },
   // ---------------------------------------------------------------- 5
   {
-    name: '星際迴廊', desc: '集合所有機關的終極挑戰', mat: 'stone',
-    start: [0, 0.5, 1], goal: [8, 0.5, -54],
-    pieces: [
-      floor(0, -2, 3, 8),
-      rail(-1.5, 2, 1.5, 2), rail(-1.5, 2, -1.5, -6), rail(1.5, 2, 1.5, -6),
-      ramp(0, -6, 0, 0, -14, 2.5, 3),
-      floor(0, -16, 3, 4, 2.5, 'wood'),
-      rail(-1.5, -14, -1.5, -18, 2.5),
-      mover(4, 2.5, -19.5, 3, 3, 'x', 4, 7, -Math.PI / 2),
-      floor(8, -25, 3, 8, 2.5, 'wood'),
-      rail(9.5, -21, 9.5, -29, 2.5),
-      spinner(8, 2.5, -26, 2.8, 1.8),
-      ramp(8, -29, 2.5, 8, -35, 0.5, 2),
-      floor(8, -39, 1.4, 8, 0.5),
-      mover(8, 0.5, -46.5, 2.5, 2.5, 'z', 2.25, 4),
-      floor(8, -53, 4, 6, 0.5),
-      rail(6, -50, 6, -56, 0.5), rail(10, -50, 10, -56, 0.5), rail(6, -56, 10, -56, 0.5),
-    ],
-    gems: [[0, 1.75, -10], [8, 3, -28], [8, 1, -40]],
-    checkpoints: [[0, 2.5, -15.5], [8, 2.5, -22.5]],
+    name: '星際迴廊', desc: '高空俯衝、垂直迴圈、螺旋與斷橋', sleeper: 'stone',
+    build: () => new Path(0, 28, 0)
+      .straight(8)
+      .straight(24, -14).gem(0, 12)
+      .straight(6)
+      .loop(4, 2.5)
+      .straight(8)
+      .checkpoint()
+      .straight(4)
+      .turn(90, 12, 0, 20)
+      .straight(12, -3)
+      .ramp(6, 1.5)
+      .gap(8, -2.5).gem(1, 4)
+      .straight(8, -1)
+      .checkpoint()
+      .straight(4)
+      .turn(-270, 8, -6, 25).gem(0, 15)
+      .straight(10, -1)
+      .hill(16, 2.5).gem(0, 8)
+      .ramp(6, 1.5)
+      .gap(7, -2)
+      .straight(10, -1)
+      .straight(10),
   },
 ];
+
+// 每關晶石數（顯示用）
+for (const lv of LEVELS) lv.gemTotal = lv.build().gems.length;

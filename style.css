@@ -180,7 +180,12 @@ h2 { margin: 0 0 6px; text-align: center; color: var(--neon); letter-spacing: 3p
 }
 .hud-time { min-width: 110px; color: var(--neon); }
 .hud-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; }
-.hud-sub { text-align: center; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.hud-sub { display: flex; justify-content: center; gap: 16px; font-size: 13px; color: var(--muted); margin-top: 6px; }
+.hud-sub b { color: var(--text); font-variant-numeric: tabular-nums; }
+#danger {
+  position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(255, 40, 60, 0) 55%, rgba(255, 40, 60, 0.55) 100%);
+}
 .hud-buttons {
   position: absolute; right: 10px; top: max(70px, calc(env(safe-area-inset-top) + 64px));
   display: flex; flex-direction: column; gap: 8px; pointer-events: auto;

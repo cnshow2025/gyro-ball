@@ -1,5 +1,7 @@
 // 本機存檔（localStorage）：解鎖進度、排行榜、設定
-const KEY = 'gyroball.v1';
+// v2：關卡改為雙軌版，排行榜重新開始（設定沿用 v1）
+const KEY = 'gyroball.v2';
+const OLD_KEY = 'gyroball.v1';
 const BOARD_SIZE = 10;
 export const GEM_BONUS = 2; // 每顆晶石折抵秒數
 
@@ -17,7 +19,12 @@ let data = load();
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return defaults();
+    if (!raw) {
+      const def = defaults();
+      const old = JSON.parse(localStorage.getItem(OLD_KEY) || 'null');
+      if (old && old.settings) def.settings = { ...def.settings, ...old.settings };
+      return def;
+    }
     const d = JSON.parse(raw);
     const def = defaults();
     return { ...def, ...d, settings: { ...def.settings, ...(d.settings || {}) } };

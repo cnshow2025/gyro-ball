@@ -18,6 +18,7 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+  <div id="danger"></div>
 
   <!-- 遊戲中 HUD -->
   <div id="hud" class="hidden">
@@ -27,6 +28,7 @@
       <div class="hud-box"><span class="hud-label">晶石</span><span id="hud-gems">0/3</span></div>
     </div>
     <div class="hud-sub">
+      <span>速度 <b id="hud-speed">0</b> km/h</span>
       <span>掉落 <b id="hud-falls">0</b></span>
     </div>
     <div class="hud-buttons">
@@ -42,7 +44,7 @@
   <section id="screen-menu" class="screen">
     <div class="panel">
       <h1 class="title">星際鋼珠</h1>
-      <p class="subtitle">傾斜手機，讓鋼珠沿軌道滾向傳送門</p>
+      <p class="subtitle">傾斜手機控制重力，讓鋼珠沿雲霄飛車雙軌衝向傳送門</p>
       <button class="btn primary" id="btn-start">開始遊戲</button>
       <button class="btn" id="btn-levels">選擇關卡</button>
       <button class="btn" id="btn-board">排行榜</button>

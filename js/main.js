@@ -15,7 +15,7 @@ const game = new Game($('game'), input, {
   onGem(n) {
     sfx.gem();
     vibrate([30, 40, 30]);
-    toast(`晶石 +1（${n}/${LEVELS[game.levelIndex].gems.length}）`);
+    toast(`晶石 +1（${n}/${LEVELS[game.levelIndex].gemTotal}）`);
     updateHud();
   },
   onHit(s) {
@@ -25,7 +25,7 @@ const game = new Game($('game'), input, {
   onFall() {
     sfx.fall();
     vibrate(250);
-    toast('掉落！');
+    toast('飛出軌道！');
   },
   onRespawn() {
     toast('重新出發');
@@ -39,8 +39,9 @@ const game = new Game($('game'), input, {
   onWin(time, gems, falls) {
     sfx.win();
     vibrate([80, 60, 80, 60, 250]);
-    const res = store.submit(game.levelIndex, time, gems, falls, LEVELS.length);
-    setTimeout(() => showClear(time, gems, falls, res), 1100);
+    const idx = game.levelIndex;
+    const res = store.submit(idx, time, gems, falls, LEVELS.length);
+    setTimeout(() => { if (game.state === 'won' && game.levelIndex === idx) showClear(idx, time, gems, falls, res); }, 1100);
   },
 });
 
@@ -77,7 +78,7 @@ function fmt(t) {
 
 function updateHud() {
   $('hud-level').textContent = game.levelIndex + 1;
-  $('hud-gems').textContent = `${game.gemCount}/${LEVELS[game.levelIndex].gems.length}`;
+  $('hud-gems').textContent = `${game.gemCount}/${LEVELS[game.levelIndex].gemTotal}`;
   $('hud-falls').textContent = game.falls;
 }
 
@@ -123,16 +124,16 @@ function startLevel(i) {
 function showControlHint() {
   const h = $('control-hint');
   h.textContent = input.hasGyro
-    ? '保持舒適的握持角度，倒數結束時會自動校正水平；按 ⊕ 可重新校正'
-    : '電腦：方向鍵 / WASD 或在畫面上拖曳控制傾斜';
+    ? '前傾加速、後傾減速；彎道往內側傾。倒數結束時自動校正水平，按 ⊕ 可重新校正'
+    : '電腦：↑ 加速 ↓ 減速 ← → 左右平衡（或在畫面上拖曳）';
   h.style.opacity = 1;
   setTimeout(() => { h.style.transition = 'opacity 1s'; h.style.opacity = 0; }, 5000);
 }
 
-function showClear(time, gems, falls, res) {
-  const total = LEVELS[game.levelIndex].gems.length;
-  const last = game.levelIndex === LEVELS.length - 1;
-  $('clear-title').textContent = last ? '全部通關！' : `第 ${game.levelIndex + 1} 關 通關！`;
+function showClear(idx, time, gems, falls, res) {
+  const total = LEVELS[idx].gemTotal;
+  const last = idx === LEVELS.length - 1;
+  $('clear-title').textContent = last ? '全部通關！' : `第 ${idx + 1} 關 通關！`;
   $('res-time').textContent = fmt(time);
   $('res-gems').textContent = `${'◆'.repeat(gems)}${'◇'.repeat(total - gems)}`;
   $('res-falls').textContent = falls;
@@ -160,7 +161,7 @@ function renderLevels() {
         <span class="meta">${lv.desc}</span>
         <span class="meta">${best ? '最佳成績 ' + fmt(best.score) : '尚未通關'}</span>
       </span>
-      <span class="gems">${'◆'.repeat(gems)}${'◇'.repeat(lv.gems.length - gems)}</span>`;
+      <span class="gems">${'◆'.repeat(gems)}${'◇'.repeat(lv.gemTotal - gems)}</span>`;
     b.onclick = async () => { await enableSensors(); startLevel(i); };
     list.appendChild(b);
   });
@@ -271,6 +272,18 @@ $('menu-tip').textContent = window.isSecureContext
   ? '建議手機直向握持；iPhone 會詢問「動作與方向」權限，請按允許'
   : '⚠ 陀螺儀需要 HTTPS 網址才能使用';
 
+// 太快（快被甩出或騰空）時畫面邊緣閃紅光，並輕微震動提醒
+let lastWarn = 0;
+function updateDanger(now) {
+  const d = game.danger;
+  const level = d > 0.55 ? (d - 0.55) / 0.45 : 0;
+  $('danger').style.opacity = level ? (0.35 + 0.65 * level) * (0.75 + 0.25 * Math.sin(now / 60)) : 0;
+  if (level > 0.6 && now - lastWarn > 350) {
+    lastWarn = now;
+    vibrate(20);
+  }
+}
+
 // ------------------------------------------------------------------ 主迴圈
 let last = performance.now();
 function frame(now) {
@@ -279,10 +292,12 @@ function frame(now) {
   game.update(dt);
   if (game.state === 'play' || game.state === 'falling') {
     $('hud-time').textContent = fmt(game.time);
+    $('hud-speed').textContent = Math.round(game.speed * 3.6);
     updateRoll(game.speed, game.grounded);
   } else {
     updateRoll(0, false);
   }
+  updateDanger(now);
   requestAnimationFrame(frame);
 }
 
