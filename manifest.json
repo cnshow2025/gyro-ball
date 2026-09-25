@@ -1,10 +1,10 @@
 {
-  "name": "星際鋼珠 · 陀螺儀闖關",
-  "short_name": "星際鋼珠",
+  "name": "草上飛珠 · 陀螺儀雲霄飛車",
+  "short_name": "草上飛珠",
   "start_url": "./",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#05070f",
-  "theme_color": "#05070f",
+  "background_color": "#8fd0ff",
+  "theme_color": "#5fae3c",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }
