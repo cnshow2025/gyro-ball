@@ -1,7 +1,7 @@
 // 本機存檔（localStorage）：解鎖進度、排行榜、設定
-// v3：關卡改為全景迷宮版，排行榜重新開始（沿用名稱、音效、震動設定；靈敏度改用新預設）
-const KEY = 'gyroball.v3';
-const OLD_KEYS = ['gyroball.v2', 'gyroball.v1'];
+// v4：木造雲霄飛車版（關卡加入起伏、共 12 關），排行榜重新開始；沿用名稱、音效、震動設定
+const KEY = 'gyroball.v4';
+const OLD_KEYS = ['gyroball.v3', 'gyroball.v2', 'gyroball.v1'];
 const BOARD_SIZE = 10;
 export const GEM_BONUS = 2; // 每顆晶石折抵秒數
 
@@ -24,8 +24,9 @@ function load() {
       for (const k of OLD_KEYS) {
         const old = JSON.parse(localStorage.getItem(k) || 'null');
         if (old && old.settings) {
-          const { name, sound, vibrate } = old.settings;
+          const { name, sound, vibrate, sens } = old.settings;
           def.settings = { ...def.settings, name, sound, vibrate };
+          if (k === 'gyroball.v3' && sens) def.settings.sens = sens; // v3 起的靈敏度可以沿用
           break;
         }
       }

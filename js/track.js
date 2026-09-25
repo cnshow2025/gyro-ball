@@ -198,6 +198,22 @@ export class Builder {
     return this;
   }
 
+  // 山丘（h > 0）；凹谷請用 dip。起點與終點高度相同、坡度平滑
+  hill(len, h) {
+    const n = Math.max(6, Math.ceil(len / 0.5));
+    const s = this.pos.clone(), f = this.fwd();
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      const p = s.clone().addScaledVector(f, len * t);
+      p.y = s.y + (h * (1 - Math.cos(2 * Math.PI * t))) / 2;
+      this.push(p);
+    }
+    return this;
+  }
+
+  // 凹谷：先下後上，可以借衝力
+  dip(len, depth) { return this.hill(len, -depth); }
+
   // 彎道：deg > 0 右轉；彎道預設往內傾 25°，高速也不易被甩出
   turn(deg, radius, dy = 0, bank = 25) {
     const arc = Math.abs(rad(deg)) * radius;
