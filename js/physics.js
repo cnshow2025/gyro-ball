@@ -3,14 +3,14 @@
 // 走到段的盡頭：若與下一段對齊就接過去，端點有擋板就反彈，否則飛出去（自由拋物）；
 // 自由飛行中落回任何軌道上方就重新貼軌；被掃桿打到會被撞飛。
 import * as THREE from '../vendor/three.module.js';
-import { RIDE_H, BALL_R, newFrame } from './track.js';
+import { RIDE_H, BALL_R, GRAVITY, newFrame } from './track.js';
 
-export const G = 12;              // 重力加速度（比真實小，珠子滾得慢、好控制）
+export const G = GRAVITY;         // 重力加速度（比真實小，珠子滾得慢、好控制）
 const ROLL_K = 5 / 7;             // 實心球滾動：加速度只有 5/7
-const DRAG = 0.02;
+const DRAG = 0.012;
 const ROLL_FRICTION = 0.1;
-export const MAX_SPEED = 6.5;
-const MU = 2.0;                   // 軌道能提供的側向力比例（夠大：彎道不容易被甩出）
+export const MAX_SPEED = 9;
+const DEFAULT_GRIP = 2.0;         // 軌道能提供的側向力比例（各關可設定，越小越容易被甩出）
 const D_MAX = 0.2;
 const LAT_W = 11, LAT_Z = 0.55;
 const JOIN_DIST = 0.3;            // 兩段端點距離在此範圍內視為對齊
@@ -31,6 +31,7 @@ export class BallSim {
   constructor(level) {
     this.level = level;
     this.segs = level.segments;
+    this.grip = level.grip ?? DEFAULT_GRIP;
     this.f = newFrame();
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -72,7 +73,7 @@ export class BallSim {
     // 側向偏移
     const need = tmpA.copy(f.k).multiplyScalar(this.v * this.v).sub(g);
     const fu = need.dot(f.u), fb = need.dot(f.b);
-    const target = (-D_MAX * fb) / (MU * Math.max(fu, 0.5));
+    const target = (-D_MAX * fb) / (this.grip * Math.max(fu, 0.5));
     this.vd += (LAT_W * LAT_W * (target - this.d) - 2 * LAT_Z * LAT_W * this.vd) * h;
     this.d += this.vd * h;
     this.danger = Math.min(Math.abs(this.d) / D_MAX, 1);

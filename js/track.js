@@ -2,6 +2,7 @@
 import * as THREE from '../vendor/three.module.js';
 
 export const DS = 0.1;         // 取樣間距
+export const GRAVITY = 12;     // 重力加速度（物理也使用這個值）
 export const BALL_R = 0.32;    // 鋼珠半徑
 export const RAIL_R = 0.055;   // 導軌半徑
 export const RAIL_GAP = 0.22;  // 導軌到中心線的距離
@@ -14,7 +15,9 @@ const rad = (d) => (d * Math.PI) / 180;
 
 // ------------------------------------------------------------------ 取樣後的一段軌道（本地座標）
 export class Track {
-  constructor(points, banks) {
+  // ups：每個點可指定「軌道上方」方向（迴圈、翻滾用；null 表示以重力方向為準）
+  // dvs：每個點的「設計速度」（翻滾用）：軌道會依這個速度自動翻轉到剛好不側滑的角度
+  constructor(points, banks, ups = [], dvs = []) {
     const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
     const L = curve.getLength();
     this.length = L;
@@ -26,11 +29,24 @@ export class Track {
     const cum = [0];
     for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + points[i].distanceTo(points[i - 1]));
     const total = cum[cum.length - 1];
-    const bankAt = (sp) => {
+    const locate = (sp) => {
       let j = 1;
       while (j < cum.length - 1 && cum[j] < sp) j++;
-      const t = THREE.MathUtils.clamp((sp - cum[j - 1]) / (cum[j] - cum[j - 1] || 1), 0, 1);
+      return [j, THREE.MathUtils.clamp((sp - cum[j - 1]) / (cum[j] - cum[j - 1] || 1), 0, 1)];
+    };
+    const bankAt = (sp) => {
+      const [j, t] = locate(sp);
       return banks[j - 1] + (banks[j] - banks[j - 1]) * t;
+    };
+    const dvAt = (sp) => {
+      const [j, t] = locate(sp);
+      return (t < 0.5 ? dvs[j - 1] : dvs[j]) ?? null;
+    };
+    const upAt = (sp) => {
+      const [j, t] = locate(sp);
+      const a = ups[j - 1], b = ups[j];
+      if (!a && !b) return null;
+      return (a || Y).clone().lerp(b || Y, t);
     };
 
     for (let i = 0; i < N; i++) {
@@ -38,7 +54,8 @@ export class Track {
       this.P.push(curve.getPointAt(u));
       const T = curve.getTangentAt(u).normalize();
       this.T.push(T);
-      let up = Y.clone().addScaledVector(T, -T.y);
+      const want = upAt(u * total) || Y;
+      let up = want.clone().addScaledVector(T, -want.dot(T));
       if (up.lengthSq() < 1e-4) up = this.U[i - 1].clone();
       up.normalize();
       const bank = bankAt(u * total);
@@ -59,6 +76,18 @@ export class Track {
       let c = 0;
       for (let j = i - 4; j <= i + 4; j++) if (j >= 0 && j < N) { k.add(raw[j]); c++; }
       this.K.push(k.divideScalar(c));
+    }
+
+    // 設計速度：法線 = v²·κ + g 的方向（在這個速度下完全不需要側向力）
+    for (let i = 0; i < N; i++) {
+      const dv = dvAt((i / (N - 1)) * total);
+      if (dv == null) continue;
+      const T = this.T[i];
+      const need = this.K[i].clone().multiplyScalar(dv * dv).add(new THREE.Vector3(0, GRAVITY, 0));
+      need.addScaledVector(T, -need.dot(T));
+      if (need.lengthSq() < 1e-6) continue;
+      this.U[i].copy(need.normalize());
+      this.B[i].crossVectors(T, this.U[i]).normalize();
     }
   }
 
@@ -84,7 +113,7 @@ export function newFrame() {
 // 世界座標 = pivot + Ry(yaw)·(本地 − pivot) + off
 export class Segment {
   constructor(points, banks, opts) {
-    this.track = new Track(points, banks);
+    this.track = new Track(points, banks, opts.ups || [], opts.dvs || []);
     this.capStart = !!opts.capStart;
     this.capEnd = !!opts.capEnd;
     this.mech = opts.mech || null;
@@ -152,9 +181,12 @@ export class Segment {
 // ------------------------------------------------------------------ 關卡畫筆
 // 像烏龜繪圖：yaw = 0 朝 -z，90 朝 +x；turn 正值右轉
 export class Builder {
-  constructor(x, y, z, yaw = 90) {
+  // opts.bank：彎道預設內傾角（度）；opts.grip：軌道側向抓地力（越小越容易被甩出）
+  constructor(x, y, z, yaw = 90, opts = {}) {
     this.pos = new THREE.Vector3(x, y, z);
     this.yaw = rad(yaw);
+    this.bankDef = opts.bank ?? 25;
+    this.grip = opts.grip ?? 2.0;
     this.segments = [];
     this.gems = [];
     this.checkpoints = [];
@@ -168,21 +200,25 @@ export class Builder {
   begin(cap = false) {
     this.pts = [this.pos.clone()];
     this.banks = [0];
+    this.ups = [null];
+    this.dvs = [null];
     this.len = 0;
     this.capNext = cap;
   }
 
   end(capEnd = false, mech = null) {
     if (this.pts.length < 2) return;
-    this.segments.push(new Segment(this.pts, this.banks, { capStart: this.capNext, capEnd, mech }));
+    this.segments.push(new Segment(this.pts, this.banks, { capStart: this.capNext, capEnd, mech, ups: this.ups, dvs: this.dvs }));
   }
 
-  push(p, bank = 0) {
+  push(p, bank = 0, up = null, dv = null) {
     const d = p.distanceTo(this.pos);
     if (d < 1e-4) return;
     this.len += d;
     this.pts.push(p.clone());
     this.banks.push(bank);
+    this.ups.push(up);
+    this.dvs.push(dv);
     this.pos.copy(p);
   }
 
@@ -211,11 +247,40 @@ export class Builder {
     return this;
   }
 
+  // 垂直大迴圈：珠子倒掛通過；shift 為側移，讓出口與入口錯開
+  loop(radius = 1.2, shift = 1.3) {
+    const start = this.pos.clone(), f = this.fwd(), r = this.right();
+    const n = 40;
+    for (let i = 1; i <= n; i++) {
+      const t = i / n, th = t * Math.PI * 2;
+      const side = shift * smooth(t);
+      const p = start.clone().addScaledVector(f, radius * Math.sin(th)).addScaledVector(Y, radius * (1 - Math.cos(th))).addScaledVector(r, side);
+      const c = start.clone().addScaledVector(Y, radius).addScaledVector(r, side);
+      this.push(p, 0, c.sub(p).normalize());
+    }
+    return this;
+  }
+
+  // 螺旋翻滾：軌道繞著前進方向翻轉 360°（dir = 1 往右翻、-1 往左翻）
+  // 翻轉角度依設計速度 speed 自動計算；速度差太多會被甩出，太慢則在頂端掉下來
+  corkscrew(len = 6, radius = 1.0, dir = 1, speed = 8) {
+    const start = this.pos.clone(), f = this.fwd(), r = this.right();
+    const n = 40;
+    for (let i = 1; i <= n; i++) {
+      // 角度用緩入緩出，讓入口和出口的方向與直線相接，不會突然轉折
+      const t = i / n, th = 2 * Math.PI * t - Math.sin(2 * Math.PI * t);
+      const p = start.clone().addScaledVector(f, len * t).addScaledVector(r, dir * radius * Math.sin(th)).addScaledVector(Y, radius * (1 - Math.cos(th)));
+      const c = start.clone().addScaledVector(f, len * t).addScaledVector(Y, radius);
+      this.push(p, 0, c.sub(p).normalize(), speed);
+    }
+    return this;
+  }
+
   // 凹谷：先下後上，可以借衝力
   dip(len, depth) { return this.hill(len, -depth); }
 
   // 彎道：deg > 0 右轉；彎道預設往內傾 25°，高速也不易被甩出
-  turn(deg, radius, dy = 0, bank = 25) {
+  turn(deg, radius, dy = 0, bank = this.bankDef) {
     const arc = Math.abs(rad(deg)) * radius;
     const n = Math.max(4, Math.ceil(arc / 0.6));
     const dYaw = rad(deg) / n, step = arc / n;
@@ -310,6 +375,6 @@ export class Builder {
 
   finish() {
     this.end(true);
-    return { segments: this.segments, gems: this.gems, checkpoints: this.checkpoints, sweepers: this.sweepers };
+    return { segments: this.segments, gems: this.gems, checkpoints: this.checkpoints, sweepers: this.sweepers, grip: this.grip };
   }
 }

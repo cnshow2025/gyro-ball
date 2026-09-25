@@ -1,7 +1,7 @@
 // 本機存檔（localStorage）：解鎖進度、排行榜、設定
-// v4：木造雲霄飛車版（關卡加入起伏、共 12 關），排行榜重新開始；沿用名稱、音效、震動設定
-const KEY = 'gyroball.v4';
-const OLD_KEYS = ['gyroball.v3', 'gyroball.v2', 'gyroball.v1'];
+// v5：12 關全部重新設計（迴圈、翻滾、螺旋、交叉），排行榜重新開始；沿用名稱、音效、震動設定
+const KEY = 'gyroball.v5';
+const OLD_KEYS = ['gyroball.v4', 'gyroball.v3', 'gyroball.v2', 'gyroball.v1'];
 const BOARD_SIZE = 10;
 export const GEM_BONUS = 2; // 每顆晶石折抵秒數
 
@@ -26,7 +26,7 @@ function load() {
         if (old && old.settings) {
           const { name, sound, vibrate, sens } = old.settings;
           def.settings = { ...def.settings, name, sound, vibrate };
-          if (k === 'gyroball.v3' && sens) def.settings.sens = sens; // v3 起的靈敏度可以沿用
+          if (k !== 'gyroball.v2' && k !== 'gyroball.v1' && sens) def.settings.sens = sens; // v3 起的靈敏度可以沿用
           break;
         }
       }

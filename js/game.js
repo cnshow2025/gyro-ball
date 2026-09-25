@@ -186,6 +186,9 @@ export class Game {
 
     this.buildBoard(box);
     this.buildWorld(box);
+    // 所有軌道取樣點：支架遇到下方有其他軌道時要跳過
+    this.obstacles = [];
+    for (const sg of this.segs) for (let i = 0; i < sg.track.N; i += 3) this.obstacles.push(sg.track.P[i]);
     const lattice = [];
     this.segs.forEach((s) => this.buildSegment(s, lattice));
     this.buildLattice(lattice);
@@ -422,11 +425,16 @@ export class Game {
     const H = new THREE.Vector3();
     for (let i = Math.round(0.4 / tr.ds); i < tr.N; i += every) {
       const P = tr.P[i];
-      if (P.y - 0.25 - this.floorY < 0.35) { bents.push(null); continue; }
+      // 太低、翻轉中（迴圈、翻滾）都不放支架
+      if (P.y - 0.25 - this.floorY < 0.35 || tr.U[i].y < 0.75) { bents.push(null); continue; }
       H.set(tr.B[i].x, 0, tr.B[i].z).normalize();
       const topY = P.y - 0.24;
       const L = new THREE.Vector3(P.x, topY, P.z).addScaledVector(H, -0.42);
       const R = new THREE.Vector3(P.x, topY, P.z).addScaledVector(H, 0.42);
+      // 正下方有別段軌道（交叉、螺旋下層）就跳過，免得支架穿過軌道
+      const blocked = this.obstacles.some((q) => q.y < topY - 0.25 &&
+        (Math.hypot(q.x - L.x, q.z - L.z) < 0.8 || Math.hypot(q.x - R.x, q.z - R.z) < 0.8));
+      if (blocked) { bents.push(null); continue; }
       const bent = { L, R, levels: [] };
       out.push([L, new THREE.Vector3(L.x, this.floorY, L.z), 0.09]);
       out.push([R, new THREE.Vector3(R.x, this.floorY, R.z), 0.09]);
