@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { BALL_R, RAIL_R, RAIL_GAP, RIDE_H, newFrame } from './track.js';
 import { BallSim, tiltGravity } from './physics.js';
+import { MAX_TILT } from './input.js';
 
 const STEP = 1 / 120;
 const VISUAL_TILT = 0.5;                            // 畫面上板子傾斜的比例（實際重力用完整傾角）
@@ -241,8 +242,11 @@ export class Game {
     if (this.world) { this.scene.remove(this.world); this.world.traverse((o) => o.geometry?.dispose()); }
     const w = new THREE.Group();
     this.world = w;
-    // 地面放低一點：板子最大傾斜時邊緣也不會碰到地面
-    const gy = this.floorY - 4.5;
+    // 地面要夠低：板子同時前後、左右傾到最大時，角落也不能碰到地面（否則草地上會冒出一塊顏色）
+    const size0 = box.getSize(new THREE.Vector3());
+    const maxTilt = MAX_TILT * VISUAL_TILT;
+    const drop = (size0.x / 2 + size0.z / 2 + 1) * Math.sin(maxTilt) + 1.5;
+    const gy = this.floorY - 0.5 - drop;
     const c = box.getCenter(new THREE.Vector3());
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), this.mats.ground);
     ground.rotation.x = -Math.PI / 2;
@@ -258,7 +262,7 @@ export class Game {
     // 模型台底座
     const size = box.getSize(new THREE.Vector3());
     // 底座放在板子裡（跟著一起傾斜），頂端貼齊板子底面，傾斜時才不會從草地穿出來
-    const pedH = 4.5;
+    const pedH = drop + 0.6;
     const ped = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(size.x, size.z) * 0.2, Math.min(size.x, size.z) * 0.26, pedH, 24), this.mats.frame);
     ped.position.set(c.x, this.floorY - 0.5 - pedH / 2, c.z);
     this.content.add(ped);
