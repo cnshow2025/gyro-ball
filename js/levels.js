@@ -1,12 +1,14 @@
 // 關卡：木造雲霄飛車
 // Builder 畫筆：straight 直線、turn 彎道（360 即螺旋盤旋）、hill 山丘、dip 凹谷、loop 垂直迴圈、
-//               corkscrew 螺旋翻滾、gap 小間隙、turntable 旋轉轉盤、bridge 移動橋、sweeper 旋轉掃桿
+//               corkscrew 螺旋翻滾、gap 小間隙、turntable 旋轉轉盤、bridge 移動橋、sweeper 旋轉掃桿、
+//               pendulum 擺錘、vanish 崩塌木板、booster 加速帶、windOn/windOff 側風區
 // Builder(x, y, z, 起始方向, { bank: 彎道內傾角, grip: 抓地力 })：後面關卡內傾小、抓地力低，太快過彎會被甩出
 import { Builder } from './track.js';
 
 const EASY = { bank: 25, grip: 2.0 };
 const MID = { bank: 12, grip: 1.4 };
 const HARD = { bank: 4, grip: 1.0 };
+const EXPERT = { bank: 3, grip: 0.9 };
 
 export const LEVELS = [
   // ================================================================ 入門（彎道內傾多、不易被甩出）
@@ -240,6 +242,88 @@ export const LEVELS = [
       .straight(6, -1.2)
       .turn(90, 2.5)
       .straight(3).sweeper(1, -1.6).straight(5).gem(0, 2)
+      .finish(),
+  },
+  // ================================================================ 大師（新機關：擺錘、崩塌木板、加速帶、側風）
+  {
+    name: '擺錘走廊', desc: '從左右擺盪的大鎚子底下穿過',
+    build: () => new Builder(-12, 10, -7, 90, HARD)
+      .straight(4).pendulum(3.2, 65).straight(6).gem(0, 3)
+      .turn(90, 3, -0.8)
+      .straight(3).checkpoint()
+      .straight(3).pendulum(2.8, 70, 0.7).straight(4).pendulum(2.8, 70, 1.4).straight(5).gem(0, 2)
+      .turn(90, 3, -0.8)
+      .straight(7).sweeper(1, 1.5).straight(5)
+      .turn(-90, 2.5, -0.5).gem(0, 3.5)
+      .straight(2).checkpoint()
+      .turn(-360, 3, -2.2)
+      .straight(3).pendulum(2.6, 70).straight(6).gem(0, 3)
+      .finish(),
+  },
+  {
+    name: '崩塌木橋', desc: '木板會消失！閃爍時快衝過去',
+    build: () => new Builder(-12, 10, -7, 90, HARD)
+      .straight(6).vanish(3).straight(5).gem(0, 2)
+      .turn(90, 3, -0.8)
+      .straight(3).checkpoint()
+      .straight(3).vanish(3, { on: 2.2, off: 1.8, phase: 1 }).straight(2).gap(1.4, -0.35).straight(3).vanish(3.5, { on: 2.4, off: 1.6, phase: 2.2 }).straight(4).gem(0, 2)
+      .turn(90, 3, -0.8)
+      .straight(2).checkpoint()
+      .turn(360, 3, -2.2).gem(0, 9)
+      .straight(4).vanish(3, { phase: 0.5 }).straight(3).pendulum(3, 65).straight(5).gem(0, 3)
+      .finish(),
+  },
+  {
+    name: '火箭加速', desc: '加速帶衝上大迴圈，出來馬上要煞車',
+    build: () => new Builder(-12, 8, -6, 90, HARD)
+      .straight(3).booster(3, 12).straight(2)
+      .loop(1.8, 1.4).gem(0, 1)
+      .straight(8, 1.2).checkpoint()
+      .turn(90, 3, -0.6)
+      .straight(3).booster(3, 11.5).straight(2)
+      .corkscrew(7, 1.1, 1, 10).gem(0, 2)
+      .straight(8, 1.2).checkpoint()
+      .turn(90, 2.5, -0.6).gem(0, 4)
+      .straight(3).booster(2.5, 11).straight(1).gap(3.0, -0.8).straight(3).gem(0, 1)
+      .straight(9, 1.4)
+      .turn(-90, 2.5)
+      .straight(6)
+      .finish(),
+  },
+  {
+    name: '強風峽谷', desc: '側風會把珠子吹出軌道，要往反方向傾',
+    build: () => new Builder(-12, 10, -7, 90, EXPERT)
+      .straight(4).windOn(1, 7).straight(8).windOff().gem(0, 4)
+      .turn(90, 3, -0.8)
+      .straight(2).checkpoint()
+      .windOn(-1, 7).turn(-90, 3, -0.6).straight(4).windOff().gem(0, 2)
+      .straight(3).pendulum(3, 65).straight(5)
+      .turn(-90, 3, -0.6)
+      .straight(2).checkpoint()
+      .straight(2).vanish(3).windOn(1, 8).straight(6).windOff().gem(0, 3)
+      .turn(90, 2.5)
+      .straight(2).checkpoint()
+      .windOn(-1, 4).turn(-360, 3.5, -2.4).windOff().gem(0, 10)
+      .straight(3).pendulum(2.8, 70).straight(6).gem(0, 3)
+      .finish(),
+  },
+  {
+    name: '極限挑戰', desc: '所有機關的最終大考',
+    build: () => new Builder(-14, 13, -8, 90, EXPERT)
+      .straight(3).booster(3, 12).straight(2)
+      .loop(1.8, 1.4).gem(0, 1)
+      .straight(8, 1.2).checkpoint()
+      .turn(90, 3, -0.6)
+      .straight(3).pendulum(2.8, 70).straight(4).vanish(3, { phase: 0.8 }).straight(4).gem(0, 2)
+      .turn(90, 3, -0.6)
+      .straight(2).checkpoint()
+      .windOn(1, 7).straight(6).windOff().straight(1).sweeper(-1, 1.6).straight(6)
+      .turntable(1.2, -90).straight(2.4).turntable(1.2, -90, { phase: 1.4 })
+      .straight(2).checkpoint()
+      .booster(2.5, 11).corkscrew(7, 1.1, -1, 10).gem(0, 2)
+      .straight(8, 1.2)
+      .turn(90, 2.5, -0.4)
+      .straight(3).gap(1.6, -0.4).straight(7).pendulum(2.6, 70, 0.5).straight(6).gem(0, 2)
       .finish(),
   },
 ];

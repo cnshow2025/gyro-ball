@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { BALL_R, RAIL_R, RAIL_GAP, RIDE_H, newFrame } from './track.js';
-import { BallSim, tiltGravity } from './physics.js';
+import { BallSim, tiltGravity, pendulumAngle, windGust } from './physics.js';
 import { MAX_TILT } from './input.js';
 
 const STEP = 1 / 120;
@@ -132,6 +132,10 @@ export class Game {
       cap: new THREE.MeshStandardMaterial({ color: 0xd8303a, roughness: 0.5 }),
       metal: new THREE.MeshStandardMaterial({ color: 0x6a7482, metalness: 0.9, roughness: 0.3 }),
       disc: new THREE.MeshStandardMaterial({ color: 0x8a5a32, map: t.plank, roughness: 0.7 }),
+      ghost: new THREE.MeshBasicMaterial({ color: 0xff5a3a, transparent: true, opacity: 0.22, depthWrite: false }),
+      boost: new THREE.MeshStandardMaterial({ color: 0xff3d00, emissive: 0xff2a00, emissiveIntensity: 1.5, roughness: 0.4, side: THREE.DoubleSide }),
+      streak: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }),
+      fan: new THREE.MeshStandardMaterial({ color: 0x3a7bd5, metalness: 0.5, roughness: 0.4 }),
       sweeper: new THREE.MeshStandardMaterial({ color: 0xe8283c, metalness: 0.3, roughness: 0.35, emissive: 0x880010, emissiveIntensity: 0.4 }),
       travel: new THREE.MeshBasicMaterial({ color: 0xff8a1f, transparent: true, opacity: 0.12, depthWrite: false }),
       grass: new THREE.MeshStandardMaterial({ map: t.grass, roughness: 1 }),
@@ -177,6 +181,7 @@ export class Game {
     const box = new THREE.Box3();
     for (const s of this.segs) for (const p of s.track.P) box.expandByPoint(p);
     for (const sw of level.sweepers) box.expandByPoint(sw.pivot);
+    for (const pd of level.pendulums) { box.expandByPoint(pd.cross.clone().addScaledVector(pd.side, 2.6)); box.expandByPoint(pd.cross.clone().addScaledVector(pd.side, -2.6)); }
     this.floorY = box.min.y - 1.6;
     box.min.y = this.floorY;
     box.expandByVector(new THREE.Vector3(2.2, 0, 2.2));
@@ -195,6 +200,9 @@ export class Game {
     this.segs.forEach((s) => this.buildSegment(s, lattice));
     this.buildLattice(lattice);
     this.buildSweepers(level.sweepers);
+    this.buildPendulums(level.pendulums);
+    this.buildBoosters(level.boosters);
+    this.buildWinds(level.winds);
 
     this.gems = level.gems.map((p) => {
       const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.26), this.mats.gem);
@@ -332,11 +340,14 @@ export class Game {
     const basis = (i) => m4.makeBasis(tr.B[i], tr.U[i], tmp.copy(tr.T[i]).negate());
 
     // 鋼條導軌
-    const railMat = seg.mech ? this.mats.mechRail : this.mats.rail;
+    // 崩塌木板外觀跟一般木軌一樣（顏色偏紅），但沒有支架
+    const vanish = seg.mech?.type === 'vanish';
+    const woody = !seg.mech || vanish;
+    const railMat = woody ? this.mats.rail : this.mats.mechRail;
     inner.add(tubeMesh(tr, (i, o) => o.copy(tr.P[i]).addScaledVector(tr.B[i], -RAIL_GAP), RAIL_R, 6, railMat));
     inner.add(tubeMesh(tr, (i, o) => o.copy(tr.P[i]).addScaledVector(tr.B[i], RAIL_GAP), RAIL_R, 6, railMat));
 
-    if (!seg.mech) {
+    if (woody) {
       // 導軌下的木樑
       inner.add(tubeMesh(tr, (i, o) => o.copy(tr.P[i]).addScaledVector(tr.B[i], -RAIL_GAP).addScaledVector(tr.U[i], -0.1), 0.065, 4, this.mats.stringer, Math.PI / 4));
       inner.add(tubeMesh(tr, (i, o) => o.copy(tr.P[i]).addScaledVector(tr.B[i], RAIL_GAP).addScaledVector(tr.U[i], -0.1), 0.065, 4, this.mats.stringer, Math.PI / 4));
@@ -351,7 +362,8 @@ export class Game {
         planks.setMatrixAt(k, m4);
         const s = tr.length - i * tr.ds, s0 = i * tr.ds;
         const nearOpen = (!seg.capStart && s0 < 1.0) || (!seg.capEnd && s < 1.0);
-        planks.setColorAt(k, nearOpen ? col.set(0xff9a2a) : col.setHSL(0.07, 0.35, 0.62 + (Math.random() - 0.5) * 0.12));
+        if (vanish) planks.setColorAt(k, col.setHSL(0.02, 0.55, 0.45 + (Math.random() - 0.5) * 0.12));
+        else planks.setColorAt(k, nearOpen ? col.set(0xff9a2a) : col.setHSL(0.07, 0.35, 0.62 + (Math.random() - 0.5) * 0.12));
       });
       planks.castShadow = planks.receiveShadow = true;
       inner.add(planks);
@@ -371,7 +383,18 @@ export class Game {
       pim.castShadow = true;
       inner.add(pim);
       // 格子支架的資料
-      this.collectLattice(tr, lattice);
+      if (!vanish) this.collectLattice(tr, lattice);
+      else {
+        // 消失時留下半透明虛影，讓玩家知道軌道會再出現的位置
+        const a = tr.P[0], b = tr.P[tr.N - 1];
+        const ghost = new THREE.Mesh(new THREE.BoxGeometry(a.distanceTo(b), 0.05, DECK_W * 2 + 0.1), this.mats.ghost);
+        ghost.position.copy(a).lerp(b, 0.5).addScaledVector(tr.U[0], -0.19);
+        const d = b.clone().sub(a).normalize();
+        ghost.rotation.y = Math.atan2(-d.z, d.x);
+        ghost.visible = false;
+        this.content.add(ghost);
+        seg.ghost = ghost;
+      }
     } else {
       // 機關：金屬枕木 + 橘色發光主樑
       inner.add(tubeMesh(tr, (i, o) => o.copy(tr.P[i]).addScaledVector(tr.U[i], -0.22), 0.07, 6, this.mats.mechSpine));
@@ -483,6 +506,109 @@ export class Game {
     });
     im.castShadow = true;
     this.content.add(im);
+  }
+
+  // 擺錘：門形支架 + 擺動的紅白錘頭
+  buildPendulums(list) {
+    this.pendulums = list.map((pd) => {
+      const topY = pd.pivot.y + 0.1;
+      const beams = [];
+      for (const sd of [-1, 1]) {
+        const base = pd.cross.clone().addScaledVector(pd.side, sd * 1.25).addScaledVector(pd.fwd, 0.75);
+        beams.push([new THREE.Vector3(base.x, this.floorY, base.z), new THREE.Vector3(base.x, topY, base.z), 0.14]);
+      }
+      const l = pd.cross.clone().addScaledVector(pd.side, -1.25).addScaledVector(pd.fwd, 0.75);
+      const r = pd.cross.clone().addScaledVector(pd.side, 1.25).addScaledVector(pd.fwd, 0.75);
+      beams.push([new THREE.Vector3(l.x, topY, l.z), new THREE.Vector3(r.x, topY, r.z), 0.14]);
+      const mid = pd.cross.clone().addScaledVector(pd.fwd, 0.75);
+      beams.push([new THREE.Vector3(mid.x, topY, mid.z), new THREE.Vector3(pd.pivot.x, topY, pd.pivot.z), 0.1]);
+      const frame = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), this.mats.metal, beams.length);
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), dv = new THREE.Vector3();
+      beams.forEach(([a, b, t], k) => {
+        dv.subVectors(b, a);
+        q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv.clone().normalize());
+        m.compose(a.clone().add(b).multiplyScalar(0.5), q, sc.set(t, dv.length(), t));
+        frame.setMatrixAt(k, m);
+      });
+      frame.castShadow = true;
+      this.content.add(frame);
+      const g = new THREE.Group();
+      g.position.copy(pd.pivot);
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, pd.len, 8), this.mats.metal);
+      rod.position.y = -pd.len / 2;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(pd.headR, 20, 14), this.mats.sweeper);
+      head.position.y = -pd.len;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(pd.headR * 1.02, pd.headR * 1.02, 0.12, 20), this.mats.white);
+      band.position.y = -pd.len;
+      band.rotation.copy(new THREE.Euler(0, 0, 0));
+      rod.castShadow = head.castShadow = true;
+      g.add(rod, head, band);
+      this.content.add(g);
+      return { def: pd, mesh: g };
+    });
+  }
+
+  // 加速帶：軌道上發光的箭頭
+  buildBoosters(list) {
+    this.boosterMeshes = [];
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.46, -0.12); shape.lineTo(0, 0.2); shape.lineTo(0.46, -0.12); shape.lineTo(0.46, -0.3); shape.lineTo(0, 0.02); shape.lineTo(-0.46, -0.3);
+    const geo = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
+    const f = newFrame(), m4 = new THREE.Matrix4(), tmp = new THREE.Vector3();
+    for (const b of list) {
+      const seg = this.segs[b.seg];
+      let k = 0;
+      for (let s = b.s0 + 0.3; s < b.s1; s += 0.6, k++) {
+        seg.frameAt(Math.min(s, seg.length), f);
+        const mat = this.mats.boost.clone();
+        const c = new THREE.Mesh(geo, mat);
+        m4.makeBasis(f.b, f.u, tmp.copy(f.t).negate()).setPosition(tmp.copy(f.p).addScaledVector(f.u, -0.135));
+        c.applyMatrix4(m4);
+        this.content.add(c);
+        this.boosterMeshes.push({ mat, k });
+      }
+    }
+  }
+
+  // 側風：風扇 + 流動的風線
+  buildWinds(list) {
+    this.windFx = list.map((w) => {
+      const seg = this.segs[w.seg];
+      const f = newFrame();
+      seg.frameAt(Math.min((w.s0 + w.s1) / 2, seg.length), f);
+      const fanPos = f.p.clone().addScaledVector(w.dir, -2.4);
+      const g = new THREE.Group();
+      g.position.copy(fanPos);
+      g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), w.dir.clone().normalize());
+      const duct = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.08, 8, 28), this.mats.fan);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.3, 12).rotateX(Math.PI / 2), this.mats.metal);
+      const blades = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const bl = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, 0.03), this.mats.white);
+        bl.position.y = 0.3;
+        const holder = new THREE.Group();
+        holder.rotation.z = (i * Math.PI) / 2;
+        holder.add(bl);
+        blades.add(holder);
+      }
+      g.add(duct, hub, blades);
+      this.content.add(g);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, fanPos.y - 0.6 - this.floorY, 8), this.mats.metal);
+      pole.position.set(fanPos.x, (fanPos.y - 0.6 + this.floorY) / 2, fanPos.z);
+      this.content.add(pole);
+      // 風線
+      const streaks = [];
+      const sgeo = new THREE.BoxGeometry(0.025, 0.025, 0.8);
+      for (let i = 0; i < 18; i++) {
+        const m = new THREE.Mesh(sgeo, this.mats.streak);
+        m.quaternion.copy(g.quaternion);
+        const s = w.s0 + Math.random() * (w.s1 - w.s0);
+        seg.frameAt(Math.min(s, seg.length), f);
+        streaks.push({ m, base: f.p.clone().add(new THREE.Vector3(0, 0.2 + Math.random() * 0.5, 0)), u: Math.random() });
+        this.content.add(m);
+      }
+      return { def: w, blades, streaks };
+    });
   }
 
   buildSweepers(list) {
@@ -773,6 +899,23 @@ export class Game {
       sg.view.rotation.y = sg.yaw;
     }
     for (const sw of this.sweepers) sw.mesh.rotation.y = sw.def.phase + sw.def.speed * this.clock;
+    for (const pd of this.pendulums) pd.mesh.quaternion.setFromAxisAngle(pd.def.fwd, -pendulumAngle(pd.def, this.clock));
+    // 崩塌木板：警告時閃爍、消失時只剩虛影
+    for (const sg of this.segs) {
+      if (sg.mech?.type !== 'vanish') continue;
+      sg.view.visible = sg.solid && !(sg.warn && Math.floor(t * 10) % 2);
+      sg.ghost.visible = !sg.solid;
+    }
+    for (const b of this.boosterMeshes) b.mat.emissiveIntensity = 0.6 + 0.9 * Math.max(0, Math.sin(t * 8 - b.k * 0.9));
+    for (const w of this.windFx) {
+      const gust = windGust(this.clock);
+      w.blades.rotation.z += dt * 18 * gust;
+      for (const st of w.streaks) {
+        st.u += dt * 0.9 * gust;
+        if (st.u > 1) st.u -= 1;
+        st.m.position.copy(st.base).addScaledVector(w.def.dir, -2.2 + st.u * 4.4);
+      }
+    }
     for (const g of this.gems) {
       if (g.taken) {
         if (g.mesh.visible) {

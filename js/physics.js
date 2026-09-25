@@ -10,6 +10,8 @@ const ROLL_K = 5 / 7;             // 實心球滾動：加速度只有 5/7
 const DRAG = 0.012;
 const ROLL_FRICTION = 0.1;
 export const MAX_SPEED = 9;
+const BOOST_CAP = 12.5;           // 加速帶可以衝到的最高速度
+const OVERSPEED_DRAG = 3;         // 超過平常最高速度時額外減速
 const DEFAULT_GRIP = 2.0;         // 軌道能提供的側向力比例（各關可設定，越小越容易被甩出）
 const D_MAX = 0.2;
 const LAT_W = 11, LAT_Z = 0.55;
@@ -25,6 +27,7 @@ export function tiltGravity(out, tx, tz) {
   return out.set(0, -G, 0).applyQuaternion(_q);
 }
 
+const tmpW = new THREE.Vector3(), tmpH = new THREE.Vector3(), tmpV = new THREE.Vector3();
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpC = new THREE.Vector3(), tmpD = new THREE.Vector3();
 
 export class BallSim {
@@ -56,18 +59,29 @@ export class BallSim {
   }
 
   step(h, g, time) {
-    if (this.onTrack) this.stepTrack(h, g);
+    if (this.onTrack) {
+      // 側風：在風區內，重力再加上側向的風力（會一陣一陣變強變弱）
+      const w = this.windAt(time);
+      if (w) g = tmpW.copy(g).add(w);
+      this.stepTrack(h, g);
+    }
     else this.stepAir(h, g);
-    this.checkSweepers(time);
+    this.checkHazards(time);
   }
 
   stepTrack(h, g) {
     const seg = this.cur;
     const f = seg.frameAt(this.s, this.f);
 
+    // 崩塌木板消失了：直接掉下去
+    if (!seg.solid) { this.updatePos(); return this.detach('vanish'); }
+
     let a = ROLL_K * g.dot(f.t) - DRAG * this.v * Math.abs(this.v) - ROLL_FRICTION * Math.sign(this.v);
+    const boost = this.boosterAt();
+    if (boost && this.v < boost.speed) a += 22;
+    else if (Math.abs(this.v) > MAX_SPEED) a -= OVERSPEED_DRAG * Math.sign(this.v);
     if (Math.abs(this.v) < 0.05 && Math.abs(ROLL_K * g.dot(f.t)) < ROLL_FRICTION) { a = 0; this.v = 0; }
-    this.v = THREE.MathUtils.clamp(this.v + a * h, -MAX_SPEED, MAX_SPEED);
+    this.v = THREE.MathUtils.clamp(this.v + a * h, -BOOST_CAP, BOOST_CAP);
     this.s += this.v * h;
 
     // 側向偏移
@@ -106,7 +120,7 @@ export class BallSim {
     const pos = tmpA, dir = tmpB, p2 = tmpC, d2 = tmpD;
     seg.endInfo(atEnd, pos, dir);
     for (let i = 0; i < this.segs.length; i++) {
-      if (i === this.seg) continue;
+      if (i === this.seg || !this.segs[i].solid) continue;
       const o = this.segs[i];
       for (const oEnd of [false, true]) {
         o.endInfo(oEnd, p2, d2);
@@ -144,6 +158,7 @@ export class BallSim {
     const local = tmpA, vloc = tmpB;
     for (let si = 0; si < this.segs.length; si++) {
       const seg = this.segs[si];
+      if (!seg.solid) continue;
       const tr = seg.track;
       seg.toLocal(this.pos, local);
       let best = -1, bd = 1.0;
@@ -173,27 +188,68 @@ export class BallSim {
     }
   }
 
-  // 掃桿碰撞：被打到就撞飛
-  checkSweepers(time) {
-    if (this.knockT > time - 0.5) return;
-    for (const sw of this.level.sweepers) {
-      const ang = sw.phase + sw.speed * time;
-      const dx = Math.cos(ang), dz = -Math.sin(ang); // 與 three.js rotation.y 相同方向
-      const rx = this.pos.x - sw.pivot.x, rz = this.pos.z - sw.pivot.z;
-      const along = THREE.MathUtils.clamp(rx * dx + rz * dz, 0, sw.len);
-      const px = rx - dx * along, pz = rz - dz * along, py = this.pos.y - sw.y;
-      if (px * px + pz * pz + py * py < (BALL_R + 0.12) ** 2) {
-        // 桿子在接觸點的速度 = ω × r
-        const tx = sw.speed * along * dz, tz = -sw.speed * along * dx;
-        if (this.onTrack) { this.updatePos(); this.detach('knock'); }
-        this.vel.x += tx * 1.4;
-        this.vel.z += tz * 1.4;
-        this.vel.y += 2.5;
-        this.noAttach = 0.4;
-        this.knockT = time;
-        this.events.push({ type: 'knock' });
-        return;
+  boosterAt() {
+    for (const b of this.level.boosters || []) if (b.seg === this.seg && this.s >= b.s0 && this.s <= b.s1) return b;
+    return null;
+  }
+
+  windAt(time) {
+    for (const w of this.level.winds || []) {
+      if (w.seg === this.seg && this.s >= w.s0 && this.s <= w.s1) {
+        return tmpV.copy(w.dir).multiplyScalar(w.strength * windGust(time));
       }
     }
+    return null;
+  }
+
+  // 障礙物碰撞（掃桿、擺錘）：被打到就撞飛
+  checkHazards(time) {
+    if (this.knockT > time - 0.5) return;
+    const hit = hazardHit(this.level, this.pos, time, tmpH);
+    if (!hit) return;
+    if (this.onTrack) { this.updatePos(); this.detach('knock'); }
+    this.vel.add(tmpH);
+    this.noAttach = 0.4;
+    this.knockT = time;
+    this.events.push({ type: 'knock' });
   }
 }
+
+// 側風強度的陣風變化（0.55 ~ 1）
+export function windGust(t) { return 0.775 + 0.225 * Math.sin(t * 2.3); }
+
+// 擺錘在時間 t 的角度與錘頭位置
+export function pendulumAngle(p, t) { return p.amp * Math.sin((2 * Math.PI * (t + p.phase)) / p.period); }
+export function pendulumHead(p, t, out) {
+  const th = pendulumAngle(p, t);
+  return out.copy(p.pivot).addScaledVector(p.side, Math.sin(th) * p.len).add(new THREE.Vector3(0, -Math.cos(th) * p.len, 0));
+}
+
+// 檢查 pos 是否被障礙打到；打到時把撞擊速度寫入 out 並回傳 true
+export function hazardHit(level, pos, time, out) {
+  for (const sw of level.sweepers || []) {
+    const ang = sw.phase + sw.speed * time;
+    const dx = Math.cos(ang), dz = -Math.sin(ang); // 與 three.js rotation.y 相同方向
+    const rx = pos.x - sw.pivot.x, rz = pos.z - sw.pivot.z;
+    const along = THREE.MathUtils.clamp(rx * dx + rz * dz, 0, sw.len);
+    const px = rx - dx * along, pz = rz - dz * along, py = pos.y - sw.y;
+    if (px * px + pz * pz + py * py < (BALL_R + 0.12) ** 2) {
+      // 桿子在接觸點的速度 = ω × r
+      out.set(sw.speed * along * dz * 1.4, 2.5, -sw.speed * along * dx * 1.4);
+      return true;
+    }
+  }
+  for (const pd of level.pendulums || []) {
+    const head = pendulumHead(pd, time, _head);
+    if (head.distanceTo(pos) < BALL_R + pd.headR) {
+      const th = pendulumAngle(pd, time);
+      const w = (pd.amp * 2 * Math.PI / pd.period) * Math.cos((2 * Math.PI * (time + pd.phase)) / pd.period);
+      // 錘頭速度 = 角速度 × 擺長，方向沿擺動切線
+      out.copy(pd.side).multiplyScalar(Math.cos(th) * pd.len * w * 1.3).add(new THREE.Vector3(0, Math.sin(th) * pd.len * w * 1.3 + 2.5, 0));
+      if (out.length() < 4) out.addScaledVector(pd.side, Math.sign(pos.clone().sub(pd.pivot).dot(pd.side)) * 4);
+      return true;
+    }
+  }
+  return false;
+}
+const _head = new THREE.Vector3();

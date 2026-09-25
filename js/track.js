@@ -122,6 +122,8 @@ export class Segment {
     this.off = new THREE.Vector3();
     this.q = new THREE.Quaternion();
     this.qInv = new THREE.Quaternion();
+    this.solid = true;  // 崩塌木板消失時為 false
+    this.warn = false;  // 崩塌前的閃爍警告
   }
 
   get length() { return this.track.length; }
@@ -146,6 +148,10 @@ export class Segment {
       else if ((u -= m.move) < m.hold1) f = 1;
       else f = 1 - smooth((u - m.hold1) / m.move);
       this.off.copy(m.axis).multiplyScalar(m.amp * f);
+    } else if (m.type === 'vanish') {
+      const u = (((t + m.phase) % (m.on + m.off)) + (m.on + m.off)) % (m.on + m.off);
+      this.solid = u < m.on;
+      this.warn = this.solid && u > m.on - 0.9;
     }
     this.q.setFromAxisAngle(Y, this.yaw);
     this.qInv.copy(this.q).invert();
@@ -191,6 +197,9 @@ export class Builder {
     this.gems = [];
     this.checkpoints = [];
     this.sweepers = [];
+    this.pendulums = [];
+    this.boosters = [];
+    this.winds = [];
     this.begin(true);
   }
 
@@ -351,6 +360,51 @@ export class Builder {
     return this;
   }
 
+  // 擺錘：軌道正上方左右擺盪的大鎚子（擺動平面與軌道垂直）
+  pendulum(period = 3.2, amp = 65, phase = 0, len = 2.2) {
+    this.pendulums.push({
+      pivot: this.pos.clone().add(new THREE.Vector3(0, RIDE_H + len, 0)),
+      side: this.right(), fwd: this.fwd(), len, headR: 0.36,
+      amp: rad(amp), period, phase, cross: this.pos.clone(),
+    });
+    return this;
+  }
+
+  // 崩塌木板：一段會週期性消失的軌道（消失前閃爍警告）
+  vanish(len = 3, { on = 2.6, off = 1.6, phase = 0 } = {}) {
+    const GAP = 0.05;
+    this.end(false);
+    const f = this.fwd();
+    const a = this.pos.clone().addScaledVector(f, GAP);
+    const b = this.pos.clone().addScaledVector(f, len - GAP);
+    this.segments.push(new Segment([a, a.clone().lerp(b, 0.5), b], [0, 0, 0], {
+      capStart: false, capEnd: false,
+      mech: { type: 'vanish', on, off, phase },
+    }));
+    this.pos.addScaledVector(f, len);
+    this.begin(false);
+    return this;
+  }
+
+  // 加速帶：經過時被推到 speed（可超過平常的最高速度）
+  booster(len = 3, speed = 11.5) {
+    this.boosters.push({ seg: this.segments.length, s0: this.len, s1: this.len + len, speed });
+    return this.straight(len);
+  }
+
+  // 側風區：windOn 到 windOff 之間的軌道會被側風吹（side = 1 吹向右、-1 吹向左，方向在開始時固定）
+  windOn(side = 1, strength = 7) {
+    this.windOpen = { seg: this.segments.length, s0: this.len, dir: this.right().multiplyScalar(side), strength };
+    return this;
+  }
+
+  windOff() {
+    const w = this.windOpen;
+    if (w && w.seg === this.segments.length) { w.s1 = this.len; this.winds.push(w); }
+    this.windOpen = null;
+    return this;
+  }
+
   // 晶石：h 為離軌道高度，back 為往回算的距離
   gem(h = 0, back = 0) {
     const p = this.pointBack(back);
@@ -375,6 +429,9 @@ export class Builder {
 
   finish() {
     this.end(true);
-    return { segments: this.segments, gems: this.gems, checkpoints: this.checkpoints, sweepers: this.sweepers, grip: this.grip };
+    return {
+      segments: this.segments, gems: this.gems, checkpoints: this.checkpoints, grip: this.grip,
+      sweepers: this.sweepers, pendulums: this.pendulums, boosters: this.boosters, winds: this.winds,
+    };
   }
 }
