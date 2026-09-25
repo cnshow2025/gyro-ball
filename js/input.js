@@ -1,10 +1,11 @@
 // 傾斜輸入：手機陀螺儀（DeviceOrientation），電腦則用方向鍵 / 滑鼠拖曳
-export const MAX_TILT = 22 * Math.PI / 180;
+// 最大傾斜效果 15°（配合預設靈敏度 0.6，手機約傾 25° 就到上限）
+export const MAX_TILT = 15 * Math.PI / 180;
 const DEG = Math.PI / 180;
 
 export class TiltInput {
   constructor() {
-    this.sens = 1;
+    this.sens = 0.6;
     this.tx = 0; // 目標傾斜：繞 x 軸（前後）
     this.tz = 0; // 目標傾斜：繞 z 軸（左右）
     this.x = 0;  // 平滑後的傾斜

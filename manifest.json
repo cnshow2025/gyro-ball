@@ -3,7 +3,7 @@
   "short_name": "星際鋼珠",
   "start_url": "./",
   "display": "fullscreen",
-  "orientation": "portrait",
+  "orientation": "landscape",
   "background_color": "#05070f",
   "theme_color": "#05070f",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]

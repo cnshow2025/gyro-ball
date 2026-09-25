@@ -1,7 +1,7 @@
 // 本機存檔（localStorage）：解鎖進度、排行榜、設定
-// v2：關卡改為雙軌版，排行榜重新開始（設定沿用 v1）
-const KEY = 'gyroball.v2';
-const OLD_KEY = 'gyroball.v1';
+// v3：關卡改為全景迷宮版，排行榜重新開始（沿用名稱、音效、震動設定；靈敏度改用新預設）
+const KEY = 'gyroball.v3';
+const OLD_KEYS = ['gyroball.v2', 'gyroball.v1'];
 const BOARD_SIZE = 10;
 export const GEM_BONUS = 2; // 每顆晶石折抵秒數
 
@@ -10,7 +10,7 @@ function defaults() {
     unlocked: 1,
     bestGems: {},
     boards: {},
-    settings: { name: '玩家', sound: true, vibrate: true, sens: 1 },
+    settings: { name: '玩家', sound: true, vibrate: true, sens: 0.6 },
   };
 }
 
@@ -21,8 +21,14 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (!raw) {
       const def = defaults();
-      const old = JSON.parse(localStorage.getItem(OLD_KEY) || 'null');
-      if (old && old.settings) def.settings = { ...def.settings, ...old.settings };
+      for (const k of OLD_KEYS) {
+        const old = JSON.parse(localStorage.getItem(k) || 'null');
+        if (old && old.settings) {
+          const { name, sound, vibrate } = old.settings;
+          def.settings = { ...def.settings, name, sound, vibrate };
+          break;
+        }
+      }
       return def;
     }
     const d = JSON.parse(raw);

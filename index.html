@@ -44,7 +44,7 @@
   <section id="screen-menu" class="screen">
     <div class="panel">
       <h1 class="title">星際鋼珠</h1>
-      <p class="subtitle">傾斜手機控制重力，讓鋼珠沿雲霄飛車雙軌衝向傳送門</p>
+      <p class="subtitle">橫拿手機、像迷宮板一樣傾斜，帶鋼珠走完雙軌迷宮</p>
       <button class="btn primary" id="btn-start">開始遊戲</button>
       <button class="btn" id="btn-levels">選擇關卡</button>
       <button class="btn" id="btn-board">排行榜</button>
@@ -90,7 +90,7 @@
         <input id="set-vibrate" type="checkbox" />
       </label>
       <label class="row col">傾斜靈敏度 <span id="sens-val"></span>
-        <input id="set-sens" type="range" min="0.5" max="2" step="0.1" />
+        <input id="set-sens" type="range" min="0.3" max="1.5" step="0.1" />
       </label>
       <p class="tip">iPhone 的 Safari 不支援網頁震動，其他手機才有震動回饋。</p>
       <button class="btn danger" id="btn-reset">清除所有紀錄</button>
@@ -125,7 +125,7 @@
     </div>
   </section>
 
-  <div id="rotate-hint" class="hidden">請將手機直向握持</div>
+  <div id="rotate-hint" class="hidden"><div>⟲</div>請將手機橫向握持</div>
 
   <script type="module" src="js/main.js"></script>
 </body>

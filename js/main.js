@@ -25,7 +25,12 @@ const game = new Game($('game'), input, {
   onFall() {
     sfx.fall();
     vibrate(250);
-    toast('飛出軌道！');
+    toast('掉下去了！');
+  },
+  onKnock() {
+    sfx.hit(1);
+    vibrate([60, 40, 120]);
+    toast('被掃桿打飛！');
   },
   onRespawn() {
     toast('重新出發');
@@ -86,6 +91,13 @@ function updateHud() {
 async function enableSensors() {
   initAudio();
   if (!gyroGranted) gyroGranted = await input.requestPermission();
+  // Android：全螢幕並鎖定橫向（iPhone 不支援，會自動略過）
+  try {
+    if (matchMedia('(pointer: coarse)').matches && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    }
+    await screen.orientation?.lock?.('landscape');
+  } catch { /* 不支援就略過 */ }
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* 忽略 */ }
 }
 
@@ -124,8 +136,8 @@ function startLevel(i) {
 function showControlHint() {
   const h = $('control-hint');
   h.textContent = input.hasGyro
-    ? '前傾加速、後傾減速；彎道往內側傾。倒數結束時自動校正水平，按 ⊕ 可重新校正'
-    : '電腦：↑ 加速 ↓ 減速 ← → 左右平衡（或在畫面上拖曳）';
+    ? '手機往哪邊傾，珠子就往畫面哪邊滾。倒數結束時自動校正水平，按 ⊕ 可重新校正'
+    : '電腦：方向鍵 / WASD 傾斜板子（或在畫面上拖曳）';
   h.style.opacity = 1;
   setTimeout(() => { h.style.transition = 'opacity 1s'; h.style.opacity = 0; }, 5000);
 }
@@ -262,14 +274,17 @@ document.addEventListener('visibilitychange', async () => {
   else if (wakeLock) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch { /* 忽略 */ } }
 });
 
-// 手機橫放時提示改直向
-const landscape = matchMedia('(orientation: landscape) and (pointer: coarse) and (max-height: 500px)');
-const checkRotate = () => $('rotate-hint').classList.toggle('hidden', !landscape.matches);
-landscape.addEventListener?.('change', checkRotate);
+// 遊戲為橫向畫面：手機直拿時提示改橫向
+const portrait = matchMedia('(orientation: portrait) and (pointer: coarse)');
+const checkRotate = () => {
+  $('rotate-hint').classList.toggle('hidden', !portrait.matches);
+  if (!portrait.matches) game.resize();
+};
+portrait.addEventListener?.('change', checkRotate);
 checkRotate();
 
 $('menu-tip').textContent = window.isSecureContext
-  ? '建議手機直向握持；iPhone 會詢問「動作與方向」權限，請按允許'
+  ? '請橫向握持手機；iPhone 會詢問「動作與方向」權限，請按允許'
   : '⚠ 陀螺儀需要 HTTPS 網址才能使用';
 
 // 太快（快被甩出或騰空）時畫面邊緣閃紅光，並輕微震動提醒
