@@ -2,7 +2,7 @@ import { Game } from './game.js';
 import { TiltInput } from './input.js';
 import { LEVELS } from './levels.js';
 import { store } from './storage.js';
-import { initAudio, setSoundEnabled, setMusicEnabled, updateRoll, sfx } from './audio.js';
+import { initAudio, setSoundEnabled, setMusicEnabled, setAmbientEnabled, updateRoll, sfx } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const screens = ['menu', 'levels', 'board', 'settings', 'pause', 'clear'];
@@ -11,6 +11,7 @@ const input = new TiltInput();
 input.sens = store.settings.sens;
 setSoundEnabled(store.settings.sound);
 setMusicEnabled(store.settings.music);
+setAmbientEnabled(store.settings.ambient);
 
 const game = new Game($('game'), input, {
   onGem(n) {
@@ -39,11 +40,13 @@ const game = new Game($('game'), input, {
   },
   onCheckpoint() {
     sfx.checkpoint();
+    sfx.cheer(false);
     vibrate(60);
     toast('已到達檢查點');
   },
   onWin(time, gems, falls) {
     sfx.win();
+    sfx.cheer(true);
     vibrate([80, 60, 80, 60, 250]);
     const idx = game.levelIndex;
     const res = store.submit(idx, time, gems, falls, LEVELS.length);
@@ -213,6 +216,7 @@ function renderSettings() {
   $('set-name').value = s.name;
   $('set-sound').checked = s.sound;
   $('set-music').checked = s.music;
+  $('set-ambient').checked = s.ambient;
   $('set-vibrate').checked = s.vibrate;
   $('set-shadows').checked = s.shadows;
   $('set-sens').value = s.sens;
@@ -261,6 +265,7 @@ $('btn-menu').onclick = goMenu;
 
 $('set-name').oninput = (e) => store.setSetting('name', e.target.value.trim() || '玩家');
 $('set-sound').onchange = (e) => { store.setSetting('sound', e.target.checked); setSoundEnabled(e.target.checked); };
+$('set-ambient').onchange = (e) => { store.setSetting('ambient', e.target.checked); setAmbientEnabled(e.target.checked); };
 $('set-music').onchange = (e) => { store.setSetting('music', e.target.checked); setMusicEnabled(e.target.checked); };
 $('set-shadows').onchange = (e) => { store.setSetting('shadows', e.target.checked); game.setShadows(e.target.checked); };
 $('set-vibrate').onchange = (e) => { store.setSetting('vibrate', e.target.checked); if (e.target.checked) vibrate(60); };

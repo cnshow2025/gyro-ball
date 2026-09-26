@@ -37,6 +37,181 @@ export function initAudio() {
   musicGain.gain.value = musicOn ? MUSIC_VOL : 0;
   musicGain.connect(master);
   startMusic();
+
+  // 環境音：鳥叫、遠處人群
+  ambientGain = ctx.createGain();
+  ambientGain.gain.value = ambientOn ? 1 : 0;
+  ambientGain.connect(master);
+  startAmbient();
+}
+
+// ------------------------------------------------------------------ 環境音：鳥叫、人群、歡呼
+let ambientGain = null;
+let ambientOn = true;
+let noiseBuf = null;
+
+function getNoise() {
+  if (noiseBuf) return noiseBuf;
+  const len = ctx.sampleRate * 3;
+  noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+
+function panner(x) {
+  if (!ctx.createStereoPanner) return null;
+  const p = ctx.createStereoPanner();
+  p.pan.value = x;
+  return p;
+}
+
+function startAmbient() {
+  // 遠處人群的嗡嗡聲：帶通噪音 + 緩慢起伏
+  const src = ctx.createBufferSource();
+  src.buffer = getNoise();
+  src.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 550;
+  bp.Q.value = 0.6;
+  const g = ctx.createGain();
+  g.gain.value = 0.018;
+  const lfo = ctx.createOscillator();
+  const lg = ctx.createGain();
+  lfo.frequency.value = 0.13;
+  lg.gain.value = 0.007;
+  lfo.connect(lg).connect(g.gain);
+  src.connect(bp).connect(g).connect(ambientGain);
+  src.start();
+  lfo.start();
+  scheduleBird();
+}
+
+// 隨機一種鳥叫：啾啾（上滑音）、顫音、兩音口哨
+function scheduleBird() {
+  setTimeout(() => {
+    if (ctx && ctx.state === 'running' && ambientOn && !document.hidden) bird();
+    scheduleBird();
+  }, 1800 + Math.random() * 5000);
+}
+
+function bird() {
+  const t0 = ctx.currentTime + 0.05;
+  const out = ctx.createGain();
+  out.gain.value = 0.05 + Math.random() * 0.04;
+  const pan = panner(Math.random() * 1.6 - 0.8);
+  if (pan) out.connect(pan).connect(ambientGain); else out.connect(ambientGain);
+  const kind = Math.floor(Math.random() * 3);
+  const base = 2200 + Math.random() * 1600;
+  const chirp = (t, f0, f1, dur, vol = 1) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + dur * 0.2);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  };
+  if (kind === 0) {
+    // 啾啾啾
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) chirp(t0 + i * 0.13, base, base * 1.6, 0.08);
+  } else if (kind === 1) {
+    // 顫音：快速重複的短音
+    const n = 8 + Math.floor(Math.random() * 8);
+    for (let i = 0; i < n; i++) chirp(t0 + i * 0.045, base * 1.2, base * 1.05, 0.035, 0.8);
+  } else {
+    // 兩音口哨：高－低
+    chirp(t0, base * 1.3, base * 1.35, 0.18);
+    chirp(t0 + 0.24, base * 0.95, base * 0.85, 0.22);
+  }
+}
+
+// 人群歡呼：big = 過關的大歡呼（含掌聲），否則是一小陣
+function cheer(big) {
+  if (!ctx || !ambientOn) return;
+  const t0 = ctx.currentTime + 0.02;
+  const dur = big ? 2.6 : 1.1;
+  const peak = big ? 0.5 : 0.22;
+  const out = ctx.createGain();
+  out.gain.setValueAtTime(0, t0);
+  out.gain.linearRampToValueAtTime(peak, t0 + 0.25);
+  out.gain.setTargetAtTime(peak * 0.7, t0 + 0.5, 0.4);
+  out.gain.setTargetAtTime(0, t0 + dur * 0.6, dur * 0.2);
+  out.connect(ambientGain);
+  // 人聲的「哇～」：一群音高各異的聲音，經過母音共振峰
+  const formants = [[800, 6], [1200, 8], [2600, 10]];
+  const voices = big ? 14 : 7;
+  for (let i = 0; i < voices; i++) {
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    const f = 180 + Math.random() * 260;
+    const st = t0 + Math.random() * 0.2;
+    o.frequency.setValueAtTime(f * 0.85, st);
+    o.frequency.linearRampToValueAtTime(f * 1.25, st + 0.35);
+    o.frequency.linearRampToValueAtTime(f * 1.05, st + dur);
+    const vib = ctx.createOscillator();
+    const vg = ctx.createGain();
+    vib.frequency.value = 4 + Math.random() * 3;
+    vg.gain.value = f * 0.03;
+    vib.connect(vg).connect(o.frequency);
+    const vgain = ctx.createGain();
+    vgain.gain.value = 2.2 / voices;
+    const pan = panner(Math.random() * 1.6 - 0.8);
+    for (const [ff, q] of formants) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = ff * (0.9 + Math.random() * 0.2);
+      bp.Q.value = q;
+      o.connect(bp).connect(vgain);
+    }
+    if (pan) vgain.connect(pan).connect(out); else vgain.connect(out);
+    o.start(st); vib.start(st);
+    o.stop(t0 + dur + 0.3); vib.stop(t0 + dur + 0.3);
+  }
+  // 人群的喧嘩（噪音）
+  const n = ctx.createBufferSource();
+  n.buffer = getNoise();
+  const nbp = ctx.createBiquadFilter();
+  nbp.type = 'bandpass';
+  nbp.frequency.value = 1000;
+  nbp.Q.value = 0.5;
+  const ng = ctx.createGain();
+  ng.gain.value = 0.6;
+  n.connect(nbp).connect(ng).connect(out);
+  n.start(t0, Math.random() * 1.5);
+  n.stop(t0 + dur + 0.3);
+  // 掌聲
+  if (big) {
+    const claps = 60;
+    for (let i = 0; i < claps; i++) {
+      const t = t0 + 0.1 + Math.random() * (dur - 0.3);
+      const c = ctx.createBufferSource();
+      c.buffer = getNoise();
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'bandpass';
+      hp.frequency.value = 1500 + Math.random() * 1500;
+      hp.Q.value = 1.2;
+      const cg = ctx.createGain();
+      cg.gain.setValueAtTime(0.5, t);
+      cg.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      const pan = panner(Math.random() * 1.8 - 0.9);
+      c.connect(hp).connect(cg);
+      if (pan) cg.connect(pan).connect(out); else cg.connect(out);
+      c.start(t, Math.random() * 2.5);
+      c.stop(t + 0.06);
+    }
+  }
+}
+
+export function setAmbientEnabled(on) {
+  ambientOn = on;
+  if (ambientGain) ambientGain.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.1);
 }
 
 // ------------------------------------------------------------------ 背景音樂：原創旋轉木馬圓舞曲（3/4 拍，16 小節循環）
@@ -207,6 +382,7 @@ export const sfx = {
   count(final) {
     tone(final ? 1046 : 523, final ? 0.4 : 0.15, 'square', 0.12);
   },
+  cheer(big = false) { cheer(big); },
   win() {
     [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, 0.35, 'triangle', 0.2, i * 0.1));
     tone(2093, 0.8, 'sine', 0.12, 0.5);
