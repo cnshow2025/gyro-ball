@@ -383,6 +383,7 @@ export const sfx = {
     tone(final ? 1046 : 523, final ? 0.4 : 0.15, 'square', 0.12);
   },
   cheer(big = false) { cheer(big); },
+  spring() { tone(220, 0.35, 'sine', 0.3, 0, 780); tone(330, 0.25, 'triangle', 0.12, 0.05, 990); },
   win() {
     [523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, 0.35, 'triangle', 0.2, i * 0.1));
     tone(2093, 0.8, 'sine', 0.12, 0.5);

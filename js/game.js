@@ -58,7 +58,8 @@ export class Game {
 
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 800);
 
-    scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x5b7a3a, 1.0));
+    this.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x5b7a3a, 1.0);
+    scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -92,18 +93,33 @@ export class Game {
       new THREE.SphereGeometry(500, 32, 16),
       new THREE.ShaderMaterial({
         side: THREE.BackSide, depthWrite: false, fog: false,
-        uniforms: { top: { value: SKY_TOP }, horizon: { value: SKY_HORIZON } },
+        uniforms: { top: { value: SKY_TOP.clone() }, horizon: { value: SKY_HORIZON.clone() } },
         vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
         fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main(){ float h = max(vP.y, 0.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.55)), 1.0); }',
       }),
     );
     this.sky = new THREE.Group();
     this.sky.add(dome);
+    this.skyUniforms = dome.material.uniforms;
+    // 夜空的星星（白天隱藏）
+    const sp = [];
+    for (let i = 0; i < 600; i++) {
+      const v = new THREE.Vector3().randomDirection();
+      if (v.y < 0.05) v.y = Math.abs(v.y) + 0.05;
+      v.normalize().multiplyScalar(450);
+      sp.push(v.x, v.y, v.z);
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.85, depthWrite: false }));
+    this.stars.visible = false;
+    this.sky.add(this.stars);
     // 太陽
     const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.glow, color: 0xfff4c0, transparent: true, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
     sunSprite.position.copy(new THREE.Vector3(-12, 26, 10).normalize().multiplyScalar(420));
     sunSprite.scale.set(90, 90, 1);
     this.sky.add(sunSprite);
+    this.sunSprite = sunSprite;
     // 雲
     this.clouds = [];
     for (let i = 0; i < 14; i++) {
@@ -132,6 +148,8 @@ export class Game {
       cap: new THREE.MeshStandardMaterial({ color: 0xd8303a, roughness: 0.5 }),
       metal: new THREE.MeshStandardMaterial({ color: 0x6a7482, metalness: 0.9, roughness: 0.3 }),
       disc: new THREE.MeshStandardMaterial({ color: 0x8a5a32, map: t.plank, roughness: 0.7 }),
+      springPlate: new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.4, metalness: 0.2 }),
+      bulb: new THREE.MeshBasicMaterial({ color: 0xfff0c0 }),
       ghost: new THREE.MeshBasicMaterial({ color: 0xff5a3a, transparent: true, opacity: 0.22, depthWrite: false }),
       boost: new THREE.MeshStandardMaterial({ color: 0xff3d00, emissive: 0xff2a00, emissiveIntensity: 1.5, roughness: 0.4, side: THREE.DoubleSide }),
       streak: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }),
@@ -197,12 +215,14 @@ export class Game {
     this.obstacles = [];
     for (const sg of this.segs) for (let i = 0; i < sg.track.N; i += 3) this.obstacles.push(sg.track.P[i]);
     const lattice = [];
-    this.segs.forEach((s) => this.buildSegment(s, lattice));
+    this.segs.forEach((s, i) => this.buildSegment(s, lattice, i));
     this.buildLattice(lattice);
     this.buildSweepers(level.sweepers);
     this.buildPendulums(level.pendulums);
     this.buildBoosters(level.boosters);
     this.buildWinds(level.winds);
+    this.buildSprings(level.springs || []);
+    this.applyNight(!!levelDef.night);
 
     this.gems = level.gems.map((p) => {
       const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.26), this.mats.gem);
@@ -327,7 +347,8 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ 軌道外觀
-  buildSegment(seg, lattice) {
+  buildSegment(seg, lattice, index) {
+    const ices = (this.level.ices || []).filter((z) => z.seg === index);
     const tr = seg.track;
     const outer = new THREE.Group();
     const inner = new THREE.Group();
@@ -362,7 +383,9 @@ export class Game {
         planks.setMatrixAt(k, m4);
         const s = tr.length - i * tr.ds, s0 = i * tr.ds;
         const nearOpen = (!seg.capStart && s0 < 1.0) || (!seg.capEnd && s < 1.0);
-        if (vanish) planks.setColorAt(k, col.setHSL(0.02, 0.55, 0.45 + (Math.random() - 0.5) * 0.12));
+        const onIce = ices.some((z) => s0 >= z.s0 - 0.1 && s0 <= z.s1 + 0.1);
+        if (onIce) planks.setColorAt(k, col.setHSL(0.54, 0.9, 0.72 + (Math.random() - 0.5) * 0.1));
+        else if (vanish) planks.setColorAt(k, col.setHSL(0.02, 0.55, 0.45 + (Math.random() - 0.5) * 0.12));
         else planks.setColorAt(k, nearOpen ? col.set(0xff9a2a) : col.setHSL(0.07, 0.35, 0.62 + (Math.random() - 0.5) * 0.12));
       });
       planks.castShadow = planks.receiveShadow = true;
@@ -508,6 +531,84 @@ export class Game {
     this.content.add(im);
   }
 
+  // 彈簧跳台：紅黃色踏板 + 彈簧
+  buildSprings(list) {
+    this.springPads = list.map((sp) => {
+      const seg = this.segs[sp.seg];
+      const f = newFrame();
+      seg.frameAt(Math.min(sp.s + 0.1, seg.length), f);
+      const g = new THREE.Group();
+      g.position.copy(f.p).addScaledVector(f.u, -0.1);
+      g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(f.b, f.u, f.t.clone().negate()));
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(DECK_W * 2 + 0.1, 0.08, 1.0), this.mats.springPlate);
+      plate.position.y = 0.02;
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(DECK_W * 2 + 0.12, 0.085, 0.18), this.mats.cap);
+      stripe.position.y = 0.02;
+      const coil = new THREE.Mesh(new THREE.TorusKnotGeometry(0.18, 0.035, 48, 6, 1, 6), this.mats.metal);
+      coil.rotation.x = Math.PI / 2;
+      coil.position.y = -0.12;
+      g.add(plate, stripe, coil);
+      this.content.add(g);
+      return { group: g, plate, stripe };
+    });
+  }
+
+  // 白天／夜晚
+  applyNight(night) {
+    this.night = night;
+    const u = this.skyUniforms;
+    u.top.value.set(night ? 0x08112b : SKY_TOP);
+    u.horizon.value.set(night ? 0x1d2c55 : SKY_HORIZON);
+    this.scene.background.set(night ? 0x1d2c55 : SKY_HORIZON);
+    this.scene.fog.color.set(night ? 0x141d3a : 0xd4ecff);
+    this.scene.fog.near = night ? 20 : 70;
+    this.scene.fog.far = night ? 80 : 260;
+    this.hemi.intensity = night ? 0.28 : 1.0;
+    this.hemi.color.set(night ? 0x7084c0 : 0xcfe8ff);
+    this.sun.intensity = night ? 0.45 : 2.6;
+    this.sun.color.set(night ? 0xaabfff : 0xfff1d6);
+    this.scene.environmentIntensity = night ? 0.25 : 0.6;
+    this.sunSprite.material.color.set(night ? 0xe6eeff : 0xfff4c0);
+    this.sunSprite.scale.set(night ? 36 : 90, night ? 36 : 90, 1);
+    for (const c of this.clouds) c.visible = !night;
+    this.stars.visible = night;
+    this.mats.rail.emissive.set(night ? 0x334455 : 0x000000);
+    if (!this.ballLight) {
+      this.ballLight = new THREE.PointLight(0xfff0c8, 0, 8, 1.4);
+      this.ballMesh.add(this.ballLight);
+    }
+    this.ballLight.intensity = night ? 5 : 0;
+    this.ballGlow.material.color.set(night ? 0xfff0c8 : 0xffffff);
+    if (night) this.buildLamps();
+  }
+
+  // 夜間：軌道旁的路燈（燈泡發光，不另外打光以免太耗效能）
+  buildLamps() {
+    const bulbs = [];
+    const f = newFrame();
+    const maxSeg = this.level.goalSeg ?? this.segs.length - 1;
+    let side = 1;
+    this.segs.forEach((seg, i) => {
+      if (seg.mech || i > maxSeg) return;
+      for (let s = 2; s < seg.length - 1; s += 6) {
+        seg.frameAt(s, f);
+        if (f.u.y < 0.8) continue;
+        const base = f.p.clone().addScaledVector(new THREE.Vector3(f.b.x, 0, f.b.z).normalize(), side * (DECK_W + 0.35));
+        side = -side;
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1.3, 6), this.mats.metal);
+        pole.position.copy(base).add(new THREE.Vector3(0, 0.45, 0));
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), this.mats.bulb);
+        bulb.position.copy(base).add(new THREE.Vector3(0, 1.12, 0));
+        const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.glow, color: 0xffc96a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+        glow.scale.set(1.6, 1.6, 1);
+        glow.position.copy(bulb.position);
+        this.content.add(pole, bulb, glow);
+        bulbs.push(glow);
+      }
+    });
+    this.lampGlows = bulbs;
+  }
+
   // 擺錘：門形支架 + 擺動的紅白錘頭
   buildPendulums(list) {
     this.pendulums = list.map((pd) => {
@@ -634,7 +735,7 @@ export class Game {
 
   // 終點拱門
   makeGoal() {
-    const last = this.segs.length - 1;
+    const last = this.level.goalSeg ?? this.segs.length - 1;
     const seg = this.segs[last];
     this.goalS = seg.length - 1.2;
     const f = seg.frameAt(this.goalS, newFrame());
@@ -830,6 +931,7 @@ export class Game {
       if (e.type === 'land') this.ev.onHit?.(0.3 + e.strength * 0.7);
       else if (e.type === 'bump') this.ev.onHit?.(0.2 + e.strength * 0.5);
       else if (e.type === 'knock') this.ev.onKnock?.();
+      else if (e.type === 'spring') { this.springKick = 0.35; this.ev.onSpring?.(); }
     }
     sim.events.length = 0;
 
@@ -854,7 +956,7 @@ export class Game {
       }
     }
 
-    if (sim.onTrack && sim.seg === this.segs.length - 1 && sim.s >= this.goalS) {
+    if (sim.onTrack && sim.seg === (this.level.goalSeg ?? this.segs.length - 1) && sim.s >= this.goalS) {
       this.state = 'won';
       this.winT = 0;
       this.ev.onWin?.(this.time, this.gemCount, this.falls);
@@ -899,6 +1001,11 @@ export class Game {
       sg.view.rotation.y = sg.yaw;
     }
     for (const sw of this.sweepers) sw.mesh.rotation.y = sw.def.phase + sw.def.speed * this.clock;
+    if (this.springKick > 0) this.springKick -= dt;
+    for (const sp of this.springPads || []) {
+      const k = Math.max(this.springKick || 0, 0) / 0.35;
+      sp.plate.position.y = sp.stripe.position.y = 0.02 + Math.sin(k * Math.PI) * 0.25;
+    }
     for (const pd of this.pendulums) pd.mesh.quaternion.setFromAxisAngle(pd.def.fwd, -pendulumAngle(pd.def, this.clock));
     // 崩塌木板：警告時閃爍、消失時只剩虛影
     for (const sg of this.segs) {

@@ -148,6 +148,15 @@ export class Segment {
       else if ((u -= m.move) < m.hold1) f = 1;
       else f = 1 - smooth((u - m.hold1) / m.move);
       this.off.copy(m.axis).multiplyScalar(m.amp * f);
+    } else if (m.type === 'switch') {
+      // 道岔：停在正路 → 轉到岔路 → 停在岔路 → 轉回正路
+      const hold1 = m.hold * 0.7, cyc = m.hold + m.move + hold1 + m.move;
+      let u = (((t + m.phase) % cyc) + cyc) % cyc, f;
+      if (u < m.hold) f = 0;
+      else if ((u -= m.hold) < m.move) f = smooth(u / m.move);
+      else if ((u -= m.move) < hold1) f = 1;
+      else f = 1 - smooth((u - hold1) / m.move);
+      this.yaw = m.ang * f;
     } else if (m.type === 'vanish') {
       const u = (((t + m.phase) % (m.on + m.off)) + (m.on + m.off)) % (m.on + m.off);
       this.solid = u < m.on;
@@ -200,6 +209,9 @@ export class Builder {
     this.pendulums = [];
     this.boosters = [];
     this.winds = [];
+    this.ices = [];
+    this.springs = [];
+    this.spurs = [];
     this.begin(true);
   }
 
@@ -398,6 +410,54 @@ export class Builder {
     return this;
   }
 
+  // 冰面：iceOn 到 iceOff 之間的軌道結冰（抓地力低、傾斜很難減速）
+  iceOn() { this.iceOpen = { seg: this.segments.length, s0: this.len }; return this; }
+  iceOff() {
+    const z = this.iceOpen;
+    if (z && z.seg === this.segments.length) { z.s1 = this.len; this.ices.push(z); }
+    this.iceOpen = null;
+    return this;
+  }
+
+  // 彈簧跳台：衝上彈簧板會被往上彈，飛到前方 dist、高 rise 處的軌道
+  // 水平速度取決於衝上來的速度：太慢會飛不到而掉下去
+  spring(rise = 2, dist = 3, vy = 8) {
+    this.straight(1.2);
+    this.springs.push({ seg: this.segments.length, s: this.len - 0.45, vy, pos: this.pos.clone(), fwd: this.fwd() });
+    this.end(false);
+    this.pos.addScaledVector(this.fwd(), dist);
+    this.pos.y += rise;
+    this.begin(false);
+    return this;
+  }
+
+  // 分岔：一段會左右切換的道岔。直走接正路；切到另一邊時接一條岔路（盡頭有晶石的死路，要自己滾回來）
+  fork(side = 1, { hold = 2.2, move = 0.6, phase = 0, turn = 35, len = 4 } = {}) {
+    const L = 2.0, ANG = rad(13);
+    this.end(false);
+    const f = this.fwd();
+    const a = this.pos.clone().addScaledVector(f, 0.05);
+    const b = this.pos.clone().addScaledVector(f, L);
+    const yawSpur = -side * ANG; // three.js 的 yaw 負值是往右
+    this.segments.push(new Segment([a, a.clone().lerp(b, 0.5), b], [0, 0, 0], {
+      capStart: false, capEnd: true, pivot: a.clone(),
+      mech: { type: 'switch', ang: yawSpur, hold, move, phase },
+    }));
+    // 岔路
+    const spurDir = f.clone().applyAxisAngle(Y, yawSpur);
+    const s0 = a.clone().addScaledVector(spurDir, L - 0.05 + 0.05);
+    const sub = new Builder(s0.x, s0.y, s0.z, ((this.yaw + side * ANG) * 180) / Math.PI, { bank: this.bankDef, grip: this.grip });
+    sub.capNext = false;
+    sub.straight(1.5).turn(side * turn, 4).straight(len).gem(0, 0.6);
+    sub.end(true);
+    for (const sg of sub.segments) { sg.spur = true; this.spurs.push(sg); }
+    this.gems.push(...sub.gems);
+    // 正路繼續
+    this.pos.copy(b).addScaledVector(f, 0.05);
+    this.begin(false);
+    return this;
+  }
+
   windOff() {
     const w = this.windOpen;
     if (w && w.seg === this.segments.length) { w.s1 = this.len; this.winds.push(w); }
@@ -429,9 +489,12 @@ export class Builder {
 
   finish() {
     this.end(true);
+    // 終點在最後一段正路；岔路接在所有正路後面
+    const goalSeg = this.segments.length - 1;
     return {
-      segments: this.segments, gems: this.gems, checkpoints: this.checkpoints, grip: this.grip,
+      segments: [...this.segments, ...this.spurs], goalSeg, gems: this.gems, checkpoints: this.checkpoints, grip: this.grip,
       sweepers: this.sweepers, pendulums: this.pendulums, boosters: this.boosters, winds: this.winds,
+      ices: this.ices, springs: this.springs,
     };
   }
 }

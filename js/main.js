@@ -29,6 +29,10 @@ const game = new Game($('game'), input, {
     vibrate(250);
     toast('掉下去了！');
   },
+  onSpring() {
+    sfx.spring();
+    vibrate(50);
+  },
   onKnock() {
     sfx.hit(1);
     vibrate([60, 40, 120]);

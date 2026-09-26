@@ -76,18 +76,23 @@ export class BallSim {
     // 崩塌木板消失了：直接掉下去
     if (!seg.solid) { this.updatePos(); return this.detach('vanish'); }
 
-    let a = ROLL_K * g.dot(f.t) - DRAG * this.v * Math.abs(this.v) - ROLL_FRICTION * Math.sign(this.v);
+    // 冰面：傾斜的效果打折（很難減速）、幾乎沒有摩擦、側向抓地力變低
+    const ice = this.iceAt();
+    let gT = g.dot(f.t);
+    if (ice) gT = -GRAVITY * f.t.y + (gT + GRAVITY * f.t.y) * 0.35;
+    let a = ROLL_K * gT - DRAG * this.v * Math.abs(this.v) - (ice ? 0.01 : ROLL_FRICTION) * Math.sign(this.v);
     const boost = this.boosterAt();
     if (boost && this.v < boost.speed) a += 22;
     else if (Math.abs(this.v) > MAX_SPEED) a -= OVERSPEED_DRAG * Math.sign(this.v);
-    if (Math.abs(this.v) < 0.05 && Math.abs(ROLL_K * g.dot(f.t)) < ROLL_FRICTION) { a = 0; this.v = 0; }
+    if (!ice && Math.abs(this.v) < 0.05 && Math.abs(ROLL_K * gT) < ROLL_FRICTION) { a = 0; this.v = 0; }
     this.v = THREE.MathUtils.clamp(this.v + a * h, -BOOST_CAP, BOOST_CAP);
     this.s += this.v * h;
 
     // 側向偏移
     const need = tmpA.copy(f.k).multiplyScalar(this.v * this.v).sub(g);
     const fu = need.dot(f.u), fb = need.dot(f.b);
-    const target = (-D_MAX * fb) / (this.grip * Math.max(fu, 0.5));
+    const grip = ice ? this.grip * 0.55 : this.grip;
+    const target = (-D_MAX * fb) / (grip * Math.max(fu, 0.5));
     this.vd += (LAT_W * LAT_W * (target - this.d) - 2 * LAT_Z * LAT_W * this.vd) * h;
     this.d += this.vd * h;
     this.danger = Math.min(Math.abs(this.d) / D_MAX, 1);
@@ -110,6 +115,17 @@ export class BallSim {
     }
 
     this.updatePos();
+    // 彈簧跳台：往上彈飛
+    const sp = this.springAt();
+    if (sp) {
+      const th = tmpA.set(f.t.x, 0, f.t.z).normalize();
+      this.vel.copy(th).multiplyScalar(Math.max(this.v, 0) * 0.85).add(tmpB.set(0, sp.vy, 0));
+      this.onTrack = false;
+      this.airT = 0;
+      this.noAttach = 0.3;
+      this.events.push({ type: 'spring' });
+      return;
+    }
     if (fu < 0) return this.detach('air');
     if (Math.abs(this.d) > D_MAX) return this.detach('side');
   }
@@ -186,6 +202,16 @@ export class BallSim {
         return;
       }
     }
+  }
+
+  iceAt() {
+    for (const z of this.level.ices || []) if (z.seg === this.seg && this.s >= z.s0 && this.s <= z.s1) return z;
+    return null;
+  }
+
+  springAt() {
+    for (const sp of this.level.springs || []) if (sp.seg === this.seg && this.s >= sp.s && this.v > 0.2) return sp;
+    return null;
   }
 
   boosterAt() {

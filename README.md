@@ -27,12 +27,17 @@
 - **崩塌木板**：偏紅色的木板會週期性消失（消失前閃爍，消失後留下紅色虛影）。
 - **加速帶**：橘紅色箭頭，經過會被推到比平常更快的速度，出來要馬上減速。
 - **側風區**：藍色風扇吹出陣風，會把珠子往軌道外推，要往反方向傾。
+- **冰面軌道**：冰藍色木板，幾乎沒有摩擦、傾斜很難減速，過彎容易滑出去。
+- **彈簧跳台**：黃色踏板，衝上去會被往上彈到更高一層的軌道；太慢會飛不到。
+- **分岔道岔**：會左右切換的金屬道岔，切到岔路就進入死路（盡頭有晶石），要自己滾回來。
+- **夜間關卡**：天黑了，只有路燈和鋼珠自己的光。
 
 ## 關卡
 - 入門：1 旋轉樓梯　2 8 字交叉　3 第一個迴圈　4 翻滾列車
 - 中級：5 交織軌道　6 雙迴圈　7 螺旋塔　8 翻滾迴圈
 - 高級：9 急彎山路　10 雙翻滾　11 交叉機關城　12 終極雲霄飛車
 - 大師：13 擺錘走廊　14 崩塌木橋　15 火箭加速　16 強風峽谷　17 極限挑戰
+- 傳奇：18 冰上滑行　19 彈簧跳跳　20 分岔迷途　21 夜間飛行　22 終極冠軍賽
 
 ## 功能
 - 3D 畫面（Three.js）：木板路面、木護欄、白色木格子支架、草地模型台與遊樂園場景
@@ -44,7 +49,7 @@
 ## 技術
 - 純靜態網頁：`index.html`、`style.css`、`js/`
 - 函式庫已放在 `vendor/`（three.js r186），不依賴外部 CDN
-- 關卡用 `js/levels.js` 的畫筆描述（straight、turn、hill、dip、loop、corkscrew、gap、turntable、bridge、sweeper、pendulum、vanish、booster、windOn/windOff），新增關卡很容易
+- 關卡用 `js/levels.js` 的畫筆描述（straight、turn、hill、dip、loop、corkscrew、gap、turntable、bridge、sweeper、pendulum、vanish、booster、windOn/windOff、iceOn/iceOff、spring、fork；night 夜間），新增關卡很容易
 - 陀螺儀需要 **HTTPS**，GitHub Pages 本身就是 HTTPS
 
 ## 部署（GitHub Pages）

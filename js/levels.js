@@ -1,7 +1,8 @@
 // 關卡：木造雲霄飛車
 // Builder 畫筆：straight 直線、turn 彎道（360 即螺旋盤旋）、hill 山丘、dip 凹谷、loop 垂直迴圈、
 //               corkscrew 螺旋翻滾、gap 小間隙、turntable 旋轉轉盤、bridge 移動橋、sweeper 旋轉掃桿、
-//               pendulum 擺錘、vanish 崩塌木板、booster 加速帶、windOn/windOff 側風區
+//               pendulum 擺錘、vanish 崩塌木板、booster 加速帶、windOn/windOff 側風區、
+//               iceOn/iceOff 冰面、spring 彈簧跳台、fork 分岔道岔；關卡設 night: true 為夜間關卡
 // Builder(x, y, z, 起始方向, { bank: 彎道內傾角, grip: 抓地力 })：後面關卡內傾小、抓地力低，太快過彎會被甩出
 import { Builder } from './track.js';
 
@@ -9,6 +10,7 @@ const EASY = { bank: 25, grip: 2.0 };
 const MID = { bank: 12, grip: 1.4 };
 const HARD = { bank: 4, grip: 1.0 };
 const EXPERT = { bank: 3, grip: 0.9 };
+const MASTER = { bank: 2, grip: 0.8 };
 
 export const LEVELS = [
   // ================================================================ 入門（彎道內傾多、不易被甩出）
@@ -324,6 +326,91 @@ export const LEVELS = [
       .straight(8, 1.2)
       .turn(90, 2.5, -0.4)
       .straight(3).gap(1.6, -0.4).straight(7).pendulum(2.6, 70, 0.5).straight(6).gem(0, 2)
+      .finish(),
+  },
+  // ================================================================ 傳奇（冰面、彈簧、分岔、夜間）
+  {
+    name: '冰上滑行', desc: '冰面幾乎煞不住車，彎道和螺旋要提早減速',
+    build: () => new Builder(-12, 10, -7, 90, EXPERT)
+      .straight(4).iceOn().straight(8, -0.8).iceOff().gem(0, 4)
+      .turn(90, 3, -0.6)
+      .straight(3).checkpoint()
+      .iceOn().turn(90, 3.5, -0.8).iceOff().gem(0, 4)
+      .straight(4).pendulum(3, 65).straight(6)
+      .turn(-90, 3, -0.6)
+      .straight(2).checkpoint()
+      .iceOn().turn(-360, 3.5, -2.4).iceOff().gem(0, 10)
+      .straight(8, 1.0)
+      .turn(90, 3)
+      .straight(6).gem(0, 3)
+      .finish(),
+  },
+  {
+    name: '彈簧跳跳', desc: '衝上彈簧板往上彈，太慢會飛不到',
+    build: () => new Builder(-12, 6, -7, 90, EXPERT)
+      .straight(6).spring(2, 3).straight(9).gem(0, 3)
+      .turn(90, 3, -0.4)
+      .straight(3).checkpoint()
+      .straight(3).spring(2.2, 3).straight(7).pendulum(3, 65).straight(5)
+      .turn(90, 3, -0.4).gem(0, 4)
+      .straight(3).vanish(3).straight(2).spring(2, 3).straight(9).gem(0, 3)
+      .turn(-90, 3, -0.4)
+      .straight(2).checkpoint()
+      .straight(4, -1.5).loop(1.4, -1.3).straight(8, 1.2)
+      .turn(-90, 2.5)
+      .straight(5)
+      .finish(),
+  },
+  {
+    name: '分岔迷途', desc: '道岔會切換，走錯就進死路（但盡頭有晶石）',
+    build: () => new Builder(-12, 10, -7, 90, EXPERT)
+      .straight(5).fork(-1).straight(6).gem(0, 3)
+      .turn(90, 3, -0.6)
+      .straight(3).checkpoint()
+      .straight(3).sweeper(1, 1.5).straight(6).fork(1, { phase: 1.2 }).straight(5)
+      .turn(90, 3, -0.6).gem(0, 4)
+      .straight(2).checkpoint()
+      .straight(3).fork(-1, { phase: 0.6, hold: 1.8 }).straight(3).gap(1.4, -0.35).straight(6).gem(0, 2)
+      .turn(-90, 3)
+      .straight(5)
+      .finish(),
+  },
+  {
+    name: '夜間飛行', desc: '天黑了！只靠路燈和鋼珠的光前進',
+    night: true,
+    build: () => new Builder(-12, 11, -7, 90, MASTER)
+      .straight(3).booster(3, 12).straight(2)
+      .loop(1.8, 1.4).gem(0, 1)
+      .straight(8, 1.2).checkpoint()
+      .turn(90, 3, -0.6)
+      .straight(3).pendulum(2.8, 70).straight(4).vanish(3, { phase: 0.6 }).straight(4).gem(0, 2)
+      .turn(90, 3, -0.6)
+      .straight(2).checkpoint()
+      .iceOn().straight(6, -0.8).iceOff().straight(3).spring(2, 3).straight(9).gem(0, 3)
+      .turn(-90, 3, -0.5)
+      .straight(5)
+      .finish(),
+  },
+  {
+    name: '終極冠軍賽', desc: '夜間＋所有機關的最後決戰',
+    night: true,
+    build: () => new Builder(-14, 13, -8, 90, MASTER)
+      .straight(3).booster(3, 12).straight(2)
+      .corkscrew(7, 1.1, 1, 10).gem(0, 2)
+      .straight(8, 1.2).checkpoint()
+      .turn(90, 3, -0.6)
+      .straight(3).fork(-1).straight(4).windOn(-1, 6).straight(6).windOff().gem(0, 2)
+      .turn(90, 3, -0.6)
+      .straight(2).checkpoint()
+      .iceOn().turn(-90, 3.5, -0.6).iceOff()
+      .straight(3).pendulum(2.6, 70, 0.5).straight(4).spring(2, 3).straight(9).gem(0, 3)
+      .turn(-90, 3, -0.4)
+      .straight(2).checkpoint()
+      .straight(3).vanish(3, { phase: 1 }).straight(3).sweeper(-1, 1.7).straight(6)
+      .turntable(1.2, 90).straight(2.4).turntable(1.2, 90, { phase: 1.4 })
+      .straight(2).booster(3, 11.5).straight(1).loop(1.4, 1.3).straight(8, 1.2)
+      .turn(-90, 2.5)
+      .straight(5).gem(0, 2)
       .finish(),
   },
 ];
